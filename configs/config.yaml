@@ -1,0 +1,51 @@
+# Vector Vision — single source of configuration.
+# Every script reads this file. Change paths here, never inside code.
+
+project:
+  seed: 42
+  device: auto            # auto | cuda | cpu
+
+study_area:
+  country: India
+  state: Maharashtra
+  district: Gondiya       # spelling used by FAO GAUL
+  grid_m: 100             # proposal: 100 m x 100 m cells
+  season_start: "2020-09-01"   # post-monsoon, when standing water peaks
+  season_end: "2020-11-30"
+  climate_years: [2016, 2020]  # multi-year window for climate features
+
+earth_engine:
+  project: vector-vision-2026
+  enabled: true
+
+paths:
+  # Stage 1 locates the dataset inside this folder automatically.
+  sen2lulc_root: data/satellite/sen2lulc
+  floodnet_root: data/drone/floodnet
+  vectors_dir: data/vectors
+  climate_dir: data/climate
+  boundaries_dir: data/boundaries
+  models_dir: models
+  outputs_dir: outputs
+
+satellite_unet:
+  in_channels: 3          # Sen-2 LULC ships RGB (B4, B3, B2) only
+  base_width: 32
+  epochs: 60
+  batch_size: 64
+  lr: 0.0005
+  train_subset: 30000     # of ~149,600 training tiles; raise if you have a strong GPU
+
+drone_unet:
+  image_size: 512
+  base_width: 32
+  epochs: 60
+  batch_size: 8
+  lr: 0.0005
+  # FloodNet classes merged into "standing water" for breeding-site detection
+  water_classes: [Water, Pool, Road-flooded, Building-flooded]
+
+risk_model:
+  n_estimators: 500
+  pseudo_absence_ratio: 5     # Sinka et al. style presence : background
+  spatial_block_deg: 1.0      # spatial cross-validation block size
