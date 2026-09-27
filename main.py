@@ -18,8 +18,8 @@ from vectorvision.utils.config import load_config, p, seed_everything  # noqa: E
 
 STAGES = [
     (1, "verify",        "Environment + dataset verification",               "ready"),
-    (2, "train-lulc",    "Satellite U-Net (from scratch) on Sen-2 LULC",       "next"),
-    (3, "eval-lulc",     "Test U-Net on held-out tiles, per-class IoU",        "planned"),
+    (2, "train-lulc",    "Satellite U-Net (from scratch) on Sen-2 LULC",       "ready"),
+    (3, "eval-lulc",     "Test U-Net on held-out tiles, per-class IoU",        "next"),
     (4, "build-features","Gondiya 100 m grid + vector-occurrence training set", "planned"),
     (5, "train-risk",    "Random Forest risk model + SHAP explanations",       "planned"),
     (6, "train-drone",   "Drone water U-Net (from scratch) on FloodNet",       "planned"),
@@ -76,6 +76,37 @@ def cmd_verify(args, cfg):
     return 0 if summary["stage1_passed"] else 1
 
 
+def cmd_train_lulc(args, cfg):
+    from vectorvision.satellite.cache import build_cache
+    from vectorvision.utils.config import get_device
+
+    print("=" * 72)
+    print("STAGE 2 - satellite U-Net, trained from random initialisation")
+    print("=" * 72)
+    dev = get_device(cfg["project"].get("device", "auto"))
+    if dev == "cpu" and not args.allow_cpu:
+        print("No GPU found. Turn one on (Kaggle: Settings > Accelerator > GPU T4 x2;")
+        print("Colab: Runtime > Change runtime type > T4 GPU), or pass --allow-cpu to force it.")
+        return 1
+    if args.subset:
+        cfg["satellite_unet"]["train_subset"] = args.subset
+    outputs = p(cfg["paths"]["outputs_dir"])
+    cache = build_cache(cfg, p(cfg["paths"]["sen2lulc_root"]), outputs, force=args.rebuild_cache)
+    if args.cache_only:
+        print("cache built; stopping as asked (--cache-only)")
+        return 0
+    from vectorvision.satellite.train import train   # imports torch; not needed for --cache-only
+    res = train(cfg, cache, p(cfg["paths"]["models_dir"]) / "unet_lulc", dev,
+                epochs=args.epochs, resume=args.resume)
+    print("\n" + "=" * 72)
+    print(f"STAGE 2 DONE - best validation mean IoU {res['best_mean_iou']:.4f}")
+    print("  weights : models/unet_lulc/best.pt")
+    print("  log     : models/unet_lulc/history.csv")
+    print("  curves  : models/unet_lulc/training_curves.png")
+    print("=" * 72)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
     sub = ap.add_subparsers(dest="cmd")
@@ -83,6 +114,13 @@ def main():
     v.add_argument("--samples", type=int, default=300, help="tiles to inspect")
     v.add_argument("--skip-ee", action="store_true", help="skip the Earth Engine check")
     v.add_argument("--no-extract", action="store_true", help="do not auto-extract the zip")
+    t = sub.add_parser("train-lulc", help="Stage 2")
+    t.add_argument("--epochs", type=int, default=None, help="override config epochs")
+    t.add_argument("--subset", type=int, default=None, help="override number of training tiles")
+    t.add_argument("--resume", action="store_true", help="continue from models/unet_lulc/last.pt")
+    t.add_argument("--rebuild-cache", action="store_true", help="re-read the dataset")
+    t.add_argument("--cache-only", action="store_true", help="build the cache, then stop")
+    t.add_argument("--allow-cpu", action="store_true", help="train without a GPU (very slow)")
     sub.add_parser("stages", help="list stages")
     args = ap.parse_args()
 
@@ -90,6 +128,8 @@ def main():
     seed_everything(cfg["project"]["seed"])
     if args.cmd == "verify":
         sys.exit(cmd_verify(args, cfg))
+    if args.cmd == "train-lulc":
+        sys.exit(cmd_train_lulc(args, cfg))
     cmd_stages(args, cfg)
 
 

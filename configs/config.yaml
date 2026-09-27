@@ -33,8 +33,13 @@ satellite_unet:
   base_width: 32
   epochs: 60
   batch_size: 64
-  lr: 0.0005
+  lr: 0.001               # peak learning rate (one-cycle). Gradient clipping keeps it stable.
   train_subset: 30000     # of ~149,600 training tiles; raise if you have a strong GPU
+  val_tiles: 4000         # validation stays at the NATURAL water share, never enriched
+  water_rich_share: 0.5   # at most half the training tiles are chosen for containing water
+  water_rich_min: 0.10    # a tile counts as water-rich above 10% water pixels
+  min_water_blob_px: 6    # water blobs smaller than this are label speckle (Stage 1 measures it)
+  num_workers: 2
 
 drone_unet:
   image_size: 512
