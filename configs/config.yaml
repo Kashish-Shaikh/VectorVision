@@ -15,7 +15,7 @@ study_area:
   climate_years: [2016, 2020]  # multi-year window for climate features
 
 earth_engine:
-  project: vector-vision-2026
+  project: vectorvision-510012
   enabled: true
 
 paths:
@@ -49,6 +49,20 @@ drone_unet:
   lr: 0.0005
   # FloodNet classes merged into "standing water" for breeding-site detection
   water_classes: [Water, Pool, Road-flooded, Building-flooded]
+
+occurrence:
+  # Real field records of where malaria vectors were found. This is the TARGET
+  # for the risk model, so it is never invented.
+  source: gbif
+  genus: Anopheles
+  country: IN
+  min_year: 2000
+  max_records: 10000
+  thin_km: 1.0
+  background_ratio: 5
+  background_min_km: 1.0
+
+
 
 risk_model:
   n_estimators: 500
