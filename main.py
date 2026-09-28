@@ -19,7 +19,7 @@ from vectorvision.utils.config import load_config, p, seed_everything  # noqa: E
 STAGES = [
     (1, "verify",        "Environment + dataset verification",               "ready"),
     (2, "train-lulc",    "Satellite U-Net (from scratch) on Sen-2 LULC",       "ready"),
-    (3, "eval-lulc",     "Test U-Net on held-out tiles, per-class IoU",        "next"),
+    (3, "eval-lulc",     "Test U-Net on held-out tiles, per-class IoU",        "ready"),
     (4, "build-features","Gondiya 100 m grid + vector-occurrence training set", "planned"),
     (5, "train-risk",    "Random Forest risk model + SHAP explanations",       "planned"),
     (6, "train-drone",   "Drone water U-Net (from scratch) on FloodNet",       "planned"),
@@ -107,6 +107,45 @@ def cmd_train_lulc(args, cfg):
     return 0
 
 
+def cmd_eval_lulc(args, cfg):
+    from vectorvision.satellite.evaluate import evaluate
+    from vectorvision.utils.config import get_device
+
+    print("=" * 72)
+    print("STAGE 3 - test the satellite U-Net on the untouched test split")
+    print("=" * 72)
+    dev = get_device(cfg["project"].get("device", "auto"))
+    rep = evaluate(cfg, p(cfg["paths"]["sen2lulc_root"]), p(cfg["paths"]["outputs_dir"]),
+                   p(cfg["paths"]["models_dir"]) / "unet_lulc", dev, args.tiles)
+    w = rep["water_index"]
+    print(f"\nTEST RESULTS on {rep['test_tiles']:,} unseen tiles")
+    for tag in ("raw_labels", "cleaned_labels"):
+        r = rep[tag]
+        print(f"\n  {tag.replace('_', ' ')}: mean IoU {r['mean_iou']:.4f} "
+              f"(95% CI {r['ci95']['mean_iou'][0]:.3f}-{r['ci95']['mean_iou'][1]:.3f}), "
+              f"pixel accuracy {r['pixel_accuracy']:.4f}")
+        print(f"    {'class':<16}{'IoU':>7}{'prec':>7}{'recall':>8}{'F1':>7}{'share':>8}")
+        for c in r["per_class"]:
+            print(f"    {c['class']:<16}{c['iou']:7.3f}{c['precision']:7.3f}{c['recall']:8.3f}"
+                  f"{c['f1']:7.3f}{c['share_pct']:7.2f}%")
+        print(f"    water IoU 95% CI {r['ci95']['water_iou'][0]:.3f}-{r['ci95']['water_iou'][1]:.3f}")
+    t = rep["tile_water_detection"]
+    print(f"\n  does the tile contain a water body? accuracy {t['accuracy']:.3f} "
+          f"(95% CI {t['accuracy_ci95'][0]:.3f}-{t['accuracy_ci95'][1]:.3f}), "
+          f"precision {t['precision']:.3f}, recall {t['recall']:.3f}, "
+          f"{t['positive_tiles']} of {t['tiles']} tiles contain water")
+    print("\n  water threshold sweep (cleaned labels):")
+    for s_ in rep["water_threshold_sweep"][::2]:
+        print(f"    threshold {s_['threshold']:.2f}  precision {s_['precision']:.3f}  "
+              f"recall {s_['recall']:.3f}  IoU {s_['iou']:.3f}")
+    print("\n" + "=" * 72)
+    print("STAGE 3 DONE")
+    print("  report : outputs/metrics/stage3_test_report.json")
+    print("  graphs : outputs/graphs/stage3_*.png")
+    print("=" * 72)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
     sub = ap.add_subparsers(dest="cmd")
@@ -121,6 +160,8 @@ def main():
     t.add_argument("--rebuild-cache", action="store_true", help="re-read the dataset")
     t.add_argument("--cache-only", action="store_true", help="build the cache, then stop")
     t.add_argument("--allow-cpu", action="store_true", help="train without a GPU (very slow)")
+    e = sub.add_parser("eval-lulc", help="Stage 3")
+    e.add_argument("--tiles", type=int, default=10000, help="test tiles to evaluate (max ~32,079)")
     sub.add_parser("stages", help="list stages")
     args = ap.parse_args()
 
@@ -130,6 +171,8 @@ def main():
         sys.exit(cmd_verify(args, cfg))
     if args.cmd == "train-lulc":
         sys.exit(cmd_train_lulc(args, cfg))
+    if args.cmd == "eval-lulc":
+        sys.exit(cmd_eval_lulc(args, cfg))
     cmd_stages(args, cfg)
 
 
