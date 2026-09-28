@@ -1,0 +1,125 @@
+{
+  "status": "PASS",
+  "root": "/kaggle/working/VectorVision/data/satellite/sen2lulc",
+  "splits": {
+    "train": {
+      "images": 149600,
+      "masks": 149600,
+      "pairs": 149600,
+      "unpaired": 0
+    },
+    "val": {
+      "images": 32079,
+      "masks": 32079,
+      "pairs": 32079,
+      "unpaired": 0
+    },
+    "test": {
+      "images": 32079,
+      "masks": 32079,
+      "pairs": 32079,
+      "unpaired": 0
+    }
+  },
+  "image": {
+    "shapes": {
+      "(64, 64, 3)": 300
+    },
+    "dtypes": {
+      "uint8": 300
+    },
+    "bands": 3,
+    "value_min": 0.0,
+    "value_max": 255.0,
+    "image_exts": [
+      ".png"
+    ]
+  },
+  "mask": {
+    "shapes": {
+      "(64, 64)": 300
+    },
+    "dtypes": {
+      "uint8": 300
+    },
+    "mask_exts": [
+      ".tif"
+    ]
+  },
+  "classes": [
+    {
+      "raw_id": 1,
+      "pixel_share_pct": 1.18,
+      "mean_rgb": [
+        68.2,
+        72.9,
+        83.6
+      ]
+    },
+    {
+      "raw_id": 2,
+      "pixel_share_pct": 1.54,
+      "mean_rgb": [
+        15.0,
+        35.5,
+        22.5
+      ]
+    },
+    {
+      "raw_id": 3,
+      "pixel_share_pct": 5.45,
+      "mean_rgb": [
+        144.8,
+        139.0,
+        146.1
+      ]
+    },
+    {
+      "raw_id": 4,
+      "pixel_share_pct": 11.21,
+      "mean_rgb": [
+        59.9,
+        64.3,
+        61.7
+      ]
+    },
+    {
+      "raw_id": 5,
+      "pixel_share_pct": 27.55,
+      "mean_rgb": [
+        119.7,
+        112.8,
+        112.3
+      ]
+    },
+    {
+      "raw_id": 6,
+      "pixel_share_pct": 48.48,
+      "mean_rgb": [
+        153.5,
+        128.5,
+        125.5
+      ]
+    },
+    {
+      "raw_id": 7,
+      "pixel_share_pct": 4.61,
+      "mean_rgb": [
+        28.0,
+        41.2,
+        31.9
+      ]
+    }
+  ],
+  "n_classes": 7,
+  "water_raw_id": 1,
+  "water_label_noise": {
+    "components": 4260,
+    "median_px": 1.0,
+    "share_under_6px_pct": 91.4
+  },
+  "appears_preprocessed": true,
+  "note_bands": "3 bands = visible RGB only (B4,B3,B2). No NIR/SWIR, so NDWI cannot be computed from this dataset; live Sentinel-2 via Earth Engine supplies it.",
+  "class_names_confirmed": false,
+  "class_names_note": "Only water is identified from data. Confirm the other six names visually with outputs/graphs/stage1_samples.png."
+}
