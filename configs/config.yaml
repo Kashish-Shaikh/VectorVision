@@ -21,7 +21,7 @@ earth_engine:
 paths:
   # Stage 1 locates the dataset inside this folder automatically.
   sen2lulc_root: data/satellite/sen2lulc
-  floodnet_root: /kaggle/input/datasets/aletbm/aerial-imagery-dataset-floodnet-challenge/FloodNet%20Challenge%20-%20Track%201
+  floodnet_root: "/kaggle/input/datasets/aletbm/aerial-imagery-dataset-floodnet-challenge/FloodNet Challenge - Track 1"
   vectors_dir: data/vectors
   climate_dir: data/climate
   boundaries_dir: data/boundaries
