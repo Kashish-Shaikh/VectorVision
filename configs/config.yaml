@@ -42,13 +42,23 @@ satellite_unet:
   num_workers: 2
 
 drone_unet:
-  image_size: 512
+  image_size: 256
   base_width: 32
-  epochs: 60
-  batch_size: 8
-  lr: 0.0005
-  # FloodNet classes merged into "standing water" for breeding-site detection
-  water_classes: [Water, Pool, Road-flooded, Building-flooded]
+  epochs: 40
+  batch_size: 16
+  lr: 0.001
+  num_workers: 2
+
+  # FloodNet:
+  # 3 = road flooded
+  # 5 = water
+  # 8 = pool
+  #
+  # Building-flooded (1) is intentionally excluded because those pixels
+  # are mostly roofs/walls rather than standing water.
+  water_class_ids: [5, 8, 3]
+
+  frame_min_water_px: 64
 
 occurrence:
   # Real field records of where malaria vectors were found. This is the TARGET
