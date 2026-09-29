@@ -1,10 +1,13 @@
 """Vector Vision — one command line for every stage.
 
     python main.py verify            Stage 1: environment + dataset verification
+    python main.py train-lulc        Stage 2: Satellite U-Net
+    python main.py eval-lulc         Stage 3: held-out test evaluation
+    python main.py build-features    Stage 4: occurrence + environmental features
+    python main.py train-risk        Stage 5: Random Forest risk model
     python main.py stages            show every stage and its status
-
-Later stages are added one at a time, and only after the previous one works.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,19 +17,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from vectorvision.utils.config import load_config, p, seed_everything  # noqa: E402
+from vectorvision.utils.config import load_config, p, seed_everything
+
 
 STAGES = [
-    (1, "verify",         "Environment + dataset verification",                 "ready"),
-    (2, "train-lulc",     "Satellite U-Net (from scratch) on Sen-2 LULC",        "ready"),
-    (3, "eval-lulc",      "Test U-Net on held-out tiles, per-class IoU",         "ready"),
-    (4, "build-features", "Gondiya 100 m grid + vector-occurrence training set",  "ready"),
-    (5, "train-risk",     "Random Forest risk model + SHAP explanations",         "planned"),
-    (6, "train-drone",    "Drone water U-Net (from scratch) on FloodNet",        "planned"),
-    (7, "infer-video",    "Frame-by-frame video detection + tracking",            "planned"),
-    (8, "fuse",           "Breeding Site Priority Index + GPS targets",           "planned"),
-    (9, "mission",        "Waypoints, flight + payload-drop simulation",          "planned"),
-    (10, "dashboard",     "Web dashboard",                                        "planned"),
+    (1, "verify",         "Environment + dataset verification",                "ready"),
+    (2, "train-lulc",     "Satellite U-Net (from scratch) on Sen-2 LULC",       "ready"),
+    (3, "eval-lulc",      "Test U-Net on held-out tiles, per-class IoU",        "ready"),
+    (4, "build-features", "Gondiya 100 m grid + vector-occurrence training set", "ready"),
+    (5, "train-risk",     "Random Forest risk model + SHAP explanations",        "ready"),
+    (6, "train-drone",    "Drone water U-Net (from scratch) on FloodNet",       "planned"),
+    (7, "infer-video",    "Frame-by-frame video detection + tracking",           "planned"),
+    (8, "fuse",           "Breeding Site Priority Index + GPS targets",          "planned"),
+    (9, "mission",        "Waypoints, flight + payload-drop simulation",         "planned"),
+    (10, "dashboard",     "Web dashboard",                                       "planned"),
 ]
 
 
@@ -89,7 +93,7 @@ def cmd_verify(args, cfg):
     if summary["stage1_passed"]:
         print("STAGE 1 PASSED")
         print("  report : outputs/metrics/stage1_dataset_report.json")
-        print("  figure : outputs/graphs/stage1_samples.png  <- open it and name the classes")
+        print("  figure : outputs/graphs/stage1_samples.png")
     else:
         print("STAGE 1 NOT PASSED - fix the [FAIL] lines above, then run again")
 
@@ -110,10 +114,7 @@ def cmd_train_lulc(args, cfg):
 
     if dev == "cpu" and not args.allow_cpu:
         print(
-            "No GPU found. Turn one on (Kaggle: Settings > Accelerator > GPU T4 x2;"
-        )
-        print(
-            "Colab: Runtime > Change runtime type > T4 GPU), or pass --allow-cpu to force it."
+            "No GPU found. Turn one on or pass --allow-cpu to force CPU training."
         )
         return 1
 
@@ -276,82 +277,142 @@ def cmd_build_features(args, cfg):
     return 0
 
 
+def cmd_train_risk(args, cfg):
+    from vectorvision.risk.train_risk import train
+
+    print("=" * 72)
+    print("STAGE 5 - risk model on real occurrence records")
+    print("=" * 72)
+
+    table = p(cfg["paths"]["vectors_dir"]) / "risk_training_table.csv"
+
+    if not table.exists():
+        print("Training table not found. Run: python main.py build-features")
+        return 1
+
+    rep = train(
+        cfg,
+        table,
+        p(cfg["paths"]["models_dir"]) / "risk_rf",
+        p(cfg["paths"]["outputs_dir"]),
+    )
+
+    print("\n" + "=" * 72)
+    print("STAGE 5 DONE")
+
+    print(
+        f"  headline (spatial CV) ROC-AUC "
+        f"{rep['spatial_cv']['roc_auc']:.3f} "
+        f"(95% CI "
+        f"{rep['spatial_cv']['roc_auc_ci95'][0]:.3f}-"
+        f"{rep['spatial_cv']['roc_auc_ci95'][1]:.3f})"
+    )
+
+    print("  model  : models/risk_rf/risk_rf.joblib")
+    print("  report : outputs/metrics/stage5_risk_report.json")
+    print("  graphs : outputs/graphs/stage5_*.png")
+    print("  Report the SPATIAL CV number, not the random-fold one.")
+    print("=" * 72)
+
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
     sub = ap.add_subparsers(dest="cmd")
 
+    # Stage 1
     v = sub.add_parser("verify", help="Stage 1")
+
     v.add_argument(
         "--samples",
         type=int,
         default=300,
         help="tiles to inspect",
     )
+
     v.add_argument(
         "--skip-ee",
         action="store_true",
         help="skip the Earth Engine check",
     )
+
     v.add_argument(
         "--no-extract",
         action="store_true",
         help="do not auto-extract the zip",
     )
 
+    # Stage 2
     t = sub.add_parser("train-lulc", help="Stage 2")
+
     t.add_argument(
         "--epochs",
         type=int,
         default=None,
         help="override config epochs",
     )
+
     t.add_argument(
         "--subset",
         type=int,
         default=None,
         help="override number of training tiles",
     )
+
     t.add_argument(
         "--resume",
         action="store_true",
         help="continue from models/unet_lulc/last.pt",
     )
+
     t.add_argument(
         "--rebuild-cache",
         action="store_true",
         help="re-read the dataset",
     )
+
     t.add_argument(
         "--cache-only",
         action="store_true",
         help="build the cache, then stop",
     )
+
     t.add_argument(
         "--allow-cpu",
         action="store_true",
-        help="train without a GPU (very slow)",
+        help="train without a GPU",
     )
 
+    # Stage 3
     e = sub.add_parser("eval-lulc", help="Stage 3")
+
     e.add_argument(
         "--tiles",
         type=int,
         default=10000,
-        help="test tiles to evaluate (max ~32,079)",
+        help="test tiles to evaluate",
     )
 
+    # Stage 4
     b = sub.add_parser("build-features", help="Stage 4")
+
     b.add_argument(
         "--rebuild",
         action="store_true",
         help="re-download and re-sample",
     )
 
+    # Stage 5
+    sub.add_parser("train-risk", help="Stage 5")
+
+    # General
     sub.add_parser("stages", help="list stages")
 
     args = ap.parse_args()
 
     cfg = load_config()
+
     seed_everything(cfg["project"]["seed"])
 
     if args.cmd == "verify":
@@ -365,6 +426,9 @@ def main():
 
     if args.cmd == "build-features":
         sys.exit(cmd_build_features(args, cfg))
+
+    if args.cmd == "train-risk":
+        sys.exit(cmd_train_risk(args, cfg))
 
     cmd_stages(args, cfg)
 
