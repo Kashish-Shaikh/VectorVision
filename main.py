@@ -554,6 +554,12 @@ def main():
         help="allow extremely slow CPU training",
     )
 
+    dr.add_argument(
+        "--test-only",
+        action="store_true",
+        help="re-test the saved model without retraining",
+    )
+
     # ------------------------------------------------------------------
     # General
     # ------------------------------------------------------------------
