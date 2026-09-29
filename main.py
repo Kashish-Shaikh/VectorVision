@@ -5,6 +5,7 @@
     python main.py eval-lulc         Stage 3: held-out test evaluation
     python main.py build-features    Stage 4: occurrence + environmental features
     python main.py train-risk        Stage 5: Random Forest risk model
+    python main.py train-drone       Stage 6: Drone U-Net on FloodNet
     python main.py stages            show every stage and its status
 """
 
@@ -26,7 +27,7 @@ STAGES = [
     (3, "eval-lulc",      "Test U-Net on held-out tiles, per-class IoU",        "ready"),
     (4, "build-features", "Gondiya 100 m grid + vector-occurrence training set", "ready"),
     (5, "train-risk",     "Random Forest risk model + SHAP explanations",        "ready"),
-    (6, "train-drone",    "Drone water U-Net (from scratch) on FloodNet",       "planned"),
+    (6, "train-drone",    "Drone water U-Net (from scratch) on FloodNet",       "ready"),
     (7, "infer-video",    "Frame-by-frame video detection + tracking",           "planned"),
     (8, "fuse",           "Breeding Site Priority Index + GPS targets",          "planned"),
     (9, "mission",        "Waypoints, flight + payload-drop simulation",         "planned"),
@@ -114,7 +115,7 @@ def cmd_train_lulc(args, cfg):
 
     if dev == "cpu" and not args.allow_cpu:
         print(
-            "No GPU found. Turn one on or pass --allow-cpu to force CPU training."
+            "No GPU found. Turn one on or pass --allow_cpu to force CPU training."
         )
         return 1
 
@@ -317,11 +318,108 @@ def cmd_train_risk(args, cfg):
     return 0
 
 
+def cmd_train_drone(args, cfg):
+    from vectorvision.vision.floodnet import build_cache, summarise
+    from vectorvision.utils.config import get_device
+
+    print("=" * 72)
+    print("STAGE 6 - drone water detector, trained from random initialisation")
+    print("=" * 72)
+
+    root = p(cfg["paths"]["floodnet_root"])
+
+    if not root.exists():
+        print(f"FloodNet not found at {root}")
+        print(
+            "On Kaggle: Add Input > search 'FloodNet' > "
+            "aerial-imagery-dataset-floodnet-challenge"
+        )
+        print(
+            "Then point paths.floodnet_root in configs/config.yaml "
+            "at it."
+        )
+        return 1
+
+    if args.inspect:
+        summarise(root)
+        return 0
+
+    dev = get_device(cfg["project"].get("device", "auto"))
+
+    if dev == "cpu" and not args.allow_cpu:
+        print("No GPU found. Turn one on, or pass --allow-cpu (very slow).")
+        return 1
+
+    cache = build_cache(
+        cfg,
+        root,
+        p(cfg["paths"]["outputs_dir"]) / "cache_floodnet",
+        force=args.rebuild_cache,
+    )
+
+    if args.cache_only:
+        print("cache built; stopping as asked (--cache-only)")
+        return 0
+
+    from vectorvision.vision.train_drone import test, train
+
+    out = p(cfg["paths"]["models_dir"]) / "drone_unet"
+
+    res = train(
+        cfg,
+        cache,
+        out,
+        dev,
+        epochs=args.epochs,
+        resume=args.resume,
+    )
+
+    rep = test(
+        cfg,
+        cache,
+        out,
+        p(cfg["paths"]["outputs_dir"]),
+        dev,
+    )
+
+    print("\n" + "=" * 72)
+    print(
+        f"STAGE 6 DONE - best validation frame F1 "
+        f"{res['best_frame_f1']:.3f}"
+    )
+
+    if rep:
+        b = rep["best_by_frame_f1"]
+
+        print(
+            f"  HELD-OUT TEST ({rep['test_images']} images, "
+            f"threshold {b['threshold']}):"
+        )
+
+        print(
+            f"    frame F1 {b['frame_f1']:.3f} "
+            f"(precision {b['frame_precision']:.3f}, "
+            f"recall {b['frame_recall']:.3f}, "
+            f"accuracy {b['frame_accuracy']:.3f})"
+        )
+
+        print(f"    water IoU {b['water_iou']:.3f}")
+
+    print("  model  : models/drone_unet/best.pt")
+    print("  report : outputs/metrics/stage6_drone_test.json")
+    print("  graphs : outputs/graphs/stage6_examples.png")
+    print("=" * 72)
+
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
     sub = ap.add_subparsers(dest="cmd")
 
+    # ------------------------------------------------------------------
     # Stage 1
+    # ------------------------------------------------------------------
     v = sub.add_parser("verify", help="Stage 1")
 
     v.add_argument(
@@ -343,7 +441,9 @@ def main():
         help="do not auto-extract the zip",
     )
 
+    # ------------------------------------------------------------------
     # Stage 2
+    # ------------------------------------------------------------------
     t = sub.add_parser("train-lulc", help="Stage 2")
 
     t.add_argument(
@@ -384,7 +484,9 @@ def main():
         help="train without a GPU",
     )
 
+    # ------------------------------------------------------------------
     # Stage 3
+    # ------------------------------------------------------------------
     e = sub.add_parser("eval-lulc", help="Stage 3")
 
     e.add_argument(
@@ -394,7 +496,9 @@ def main():
         help="test tiles to evaluate",
     )
 
+    # ------------------------------------------------------------------
     # Stage 4
+    # ------------------------------------------------------------------
     b = sub.add_parser("build-features", help="Stage 4")
 
     b.add_argument(
@@ -403,10 +507,56 @@ def main():
         help="re-download and re-sample",
     )
 
+    # ------------------------------------------------------------------
     # Stage 5
+    # ------------------------------------------------------------------
     sub.add_parser("train-risk", help="Stage 5")
 
+    # ------------------------------------------------------------------
+    # Stage 6
+    # ------------------------------------------------------------------
+    dr = sub.add_parser("train-drone", help="Stage 6")
+
+    dr.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help="override config epochs",
+    )
+
+    dr.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue from models/drone_unet/last.pt",
+    )
+
+    dr.add_argument(
+        "--rebuild-cache",
+        action="store_true",
+        help="re-read and rebuild the FloodNet cache",
+    )
+
+    dr.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="build the FloodNet cache, then stop",
+    )
+
+    dr.add_argument(
+        "--inspect",
+        action="store_true",
+        help="show the FloodNet dataset layout, then stop",
+    )
+
+    dr.add_argument(
+        "--allow-cpu",
+        action="store_true",
+        help="allow extremely slow CPU training",
+    )
+
+    # ------------------------------------------------------------------
     # General
+    # ------------------------------------------------------------------
     sub.add_parser("stages", help="list stages")
 
     args = ap.parse_args()
@@ -429,6 +579,9 @@ def main():
 
     if args.cmd == "train-risk":
         sys.exit(cmd_train_risk(args, cfg))
+
+    if args.cmd == "train-drone":
+        sys.exit(cmd_train_drone(args, cfg))
 
     cmd_stages(args, cfg)
 
