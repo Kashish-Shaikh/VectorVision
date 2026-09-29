@@ -197,32 +197,291 @@ def train(cfg: dict, cache: Path, out_dir: Path, dev: str, epochs=None, resume=F
 
 
 def test(cfg: dict, cache: Path, out_dir: Path, outputs: Path, dev: str) -> dict:
-    """Final numbers on the untouched test split, plus a threshold sweep."""
+    """Final numbers on the untouched test split, plus baseline and pool-size diagnostics."""
     d = cfg["drone_unet"]
     min_px = int(d["frame_min_water_px"])
+
     xt = cache / "X_test.npy"
     if not xt.exists():
         print("no test split in the cache; skipping the held-out test")
         return {}
-    X, Y = np.load(xt), np.load(cache / "Y_test.npy")
-    ck = torch.load(out_dir / "best.pt", map_location=dev, weights_only=False)
-    model = UNet(2, ck["config"]["base_width"], 3).to(dev)
-    model.load_state_dict(ck["model"]); model.eval()
-    loader = DataLoader(DroneSet(X, Y, False), batch_size=max(4, d["batch_size"]))
 
+    X, Y = np.load(xt), np.load(cache / "Y_test.npy")
+
+    ck = torch.load(
+        out_dir / "best.pt",
+        map_location=dev,
+        weights_only=False,
+    )
+
+    model = UNet(2, ck["config"]["base_width"], 3).to(dev)
+    model.load_state_dict(ck["model"])
+    model.eval()
+
+    loader = DataLoader(
+        DroneSet(X, Y, False),
+        batch_size=max(4, d["batch_size"]),
+    )
+
+    # ------------------------------------------------------------
+    # Threshold sweep
+    # ------------------------------------------------------------
     sweep = []
+
     for th in np.round(np.arange(0.2, 0.85, 0.1), 2):
-        m = evaluate(model, loader, dev, min_px, thresh=float(th))
+        m = evaluate(
+            model,
+            loader,
+            dev,
+            min_px,
+            thresh=float(th),
+        )
         m["threshold"] = float(th)
         sweep.append(m)
+
     main = max(sweep, key=lambda m: m["frame_f1"])
-    rep = {"test_images": int(len(X)), "model_epoch": int(ck["epoch"] + 1),
-           "best_by_frame_f1": main, "threshold_sweep": sweep,
-           "water_classes": ck["meta"]["water_classes"],
-           "note": "Test split never used for training or checkpoint selection."}
+
+    # ------------------------------------------------------------
+    # Re-run predictions at the selected threshold so we can
+    # calculate frame diagnostics and pool-size sensitivity.
+    # ------------------------------------------------------------
+    pred_pixel_counts = []
+    true_pixel_counts = []
+
+    with torch.no_grad():
+        for xb, yb in loader:
+            xb = xb.to(dev)
+
+            prob = torch.softmax(model(xb).float(), dim=1)[:, 1]
+            pred = (prob >= float(main["threshold"])).cpu().numpy()
+
+            true = yb.numpy()
+
+            pred_pixel_counts.extend(
+                pred.reshape(len(pred), -1).sum(axis=1).tolist()
+            )
+
+            true_pixel_counts.extend(
+                true.reshape(len(true), -1).sum(axis=1).tolist()
+            )
+
+    pred_pixel_counts = np.asarray(pred_pixel_counts)
+    true_pixel_counts = np.asarray(true_pixel_counts)
+
+    n_frames = len(X)
+    total_pixels = int(X.shape[1] * X.shape[2])
+
+    # ------------------------------------------------------------
+    # Frame-level diagnostics using the configured 64-pixel rule
+    # ------------------------------------------------------------
+    pred_frame = pred_pixel_counts >= min_px
+    true_frame = true_pixel_counts >= min_px
+
+    tp = int(np.sum(pred_frame & true_frame))
+    fp = int(np.sum(pred_frame & ~true_frame))
+    tn = int(np.sum(~pred_frame & ~true_frame))
+    fn = int(np.sum(~pred_frame & true_frame))
+
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) else 0.0
+    accuracy = (tp + tn) / n_frames if n_frames else 0.0
+
+    if precision + recall:
+        f1 = 2 * precision * recall / (precision + recall)
+    else:
+        f1 = 0.0
+
+    balanced_accuracy = (recall + specificity) / 2
+
+    prevalence = float(np.mean(true_frame))
+
+    # Always predict water baseline
+    baseline_precision = prevalence
+    baseline_recall = 1.0
+    baseline_specificity = 0.0
+    baseline_accuracy = prevalence
+
+    if baseline_precision + baseline_recall:
+        baseline_f1 = (
+            2 * baseline_precision * baseline_recall
+            / (baseline_precision + baseline_recall)
+        )
+    else:
+        baseline_f1 = 0.0
+
+    frame_summary = {
+        "frames": n_frames,
+        "frames_with_water": int(np.sum(true_frame)),
+        "prevalence": prevalence,
+        "frame_tp": tp,
+        "frame_fp": fp,
+        "frame_tn": tn,
+        "frame_fn": fn,
+        "frame_precision": precision,
+        "frame_recall": recall,
+        "frame_specificity": specificity,
+        "frame_f1": f1,
+        "frame_accuracy": accuracy,
+        "frame_balanced_accuracy": balanced_accuracy,
+        "always_water_f1": baseline_f1,
+        "always_water_accuracy": baseline_accuracy,
+        "always_water_specificity": baseline_specificity,
+    }
+
+    # ------------------------------------------------------------
+    # Pool-size diagnostic
+    #
+    # Redefine "frame contains water" using different minimum
+    # fractions of image area.
+    # ------------------------------------------------------------
+    pool_fractions = [
+        0.0002,
+        0.001,
+        0.005,
+        0.02,
+        0.05,
+    ]
+
+    pool_diagnostics = []
+
+    for frac in pool_fractions:
+        pool_min_px = max(1, int(round(total_pixels * frac)))
+
+        pred_pool = pred_pixel_counts >= pool_min_px
+        true_pool = true_pixel_counts >= pool_min_px
+
+        p_tp = int(np.sum(pred_pool & true_pool))
+        p_fp = int(np.sum(pred_pool & ~true_pool))
+        p_tn = int(np.sum(~pred_pool & ~true_pool))
+        p_fn = int(np.sum(~pred_pool & true_pool))
+
+        p_precision = (
+            p_tp / (p_tp + p_fp)
+            if (p_tp + p_fp)
+            else 0.0
+        )
+
+        p_recall = (
+            p_tp / (p_tp + p_fn)
+            if (p_tp + p_fn)
+            else 0.0
+        )
+
+        p_specificity = (
+            p_tn / (p_tn + p_fp)
+            if (p_tn + p_fp)
+            else 0.0
+        )
+
+        p_f1 = (
+            2 * p_precision * p_recall / (p_precision + p_recall)
+            if (p_precision + p_recall)
+            else 0.0
+        )
+
+        p_accuracy = (
+            (p_tp + p_tn) / n_frames
+            if n_frames
+            else 0.0
+        )
+
+        p_balanced_accuracy = (
+            p_recall + p_specificity
+        ) / 2
+
+        pool_prevalence = float(np.mean(true_pool))
+
+        # Always-positive baseline for this definition
+        baseline_pool_f1 = (
+            2 * pool_prevalence / (1 + pool_prevalence)
+            if pool_prevalence > 0
+            else 0.0
+        )
+
+        pool_diagnostics.append({
+            "fraction": frac,
+            "min_pixels": pool_min_px,
+            "min_pixels_percent": 100 * frac,
+            "frames_with_water": int(np.sum(true_pool)),
+            "prevalence": pool_prevalence,
+            "frame_precision": p_precision,
+            "frame_recall": p_recall,
+            "frame_specificity": p_specificity,
+            "frame_f1": p_f1,
+            "frame_accuracy": p_accuracy,
+            "frame_balanced_accuracy": p_balanced_accuracy,
+            "always_water_f1": baseline_pool_f1,
+            "f1_gain_over_baseline": p_f1 - baseline_pool_f1,
+        })
+
+    # ------------------------------------------------------------
+    # Print diagnostics
+    # ------------------------------------------------------------
+    print("\nFRAME-LEVEL BASELINE COMPARISON")
+    print("-" * 72)
+
+    print(f"frames                : {n_frames}")
+    print(f"frames with water     : {frame_summary['frames_with_water']}")
+    print(f"prevalence            : {prevalence:.3f}")
+    print(f"model frame F1        : {f1:.3f}")
+    print(f"always-water F1       : {baseline_f1:.3f}")
+    print(f"model accuracy        : {accuracy:.3f}")
+    print(f"always-water accuracy : {baseline_accuracy:.3f}")
+    print(f"specificity           : {specificity:.3f}")
+    print(f"balanced accuracy     : {balanced_accuracy:.3f}")
+
+    print("\nPOOL-SIZE DIAGNOSTIC")
+    print("-" * 72)
+    print(
+        f"{'pool %':>8} {'min px':>8} {'F1':>8} "
+        f"{'baseline':>10} {'gain':>10} {'recall':>10} {'specificity':>12}"
+    )
+
+    for row in pool_diagnostics:
+        print(
+            f"{row['min_pixels_percent']:8.3f} "
+            f"{row['min_pixels']:8d} "
+            f"{row['frame_f1']:8.3f} "
+            f"{row['always_water_f1']:10.3f} "
+            f"{row['f1_gain_over_baseline']:10.3f} "
+            f"{row['frame_recall']:10.3f} "
+            f"{row['frame_specificity']:12.3f}"
+        )
+
+    # ------------------------------------------------------------
+    # Save complete report
+    # ------------------------------------------------------------
+    rep = {
+        "test_images": int(len(X)),
+        "model_epoch": int(ck["epoch"] + 1),
+        "best_by_frame_f1": main,
+        "threshold_sweep": sweep,
+        "frame_summary": frame_summary,
+        "pool_diagnostics": pool_diagnostics,
+        "water_classes": ck["meta"]["water_classes"],
+        "note": (
+            "Test split never used for training or checkpoint selection."
+        ),
+    }
+
     (outputs / "metrics").mkdir(parents=True, exist_ok=True)
-    (outputs / "metrics" / "stage6_drone_test.json").write_text(json.dumps(rep, indent=2))
-    _examples(model, X, Y, dev, outputs / "graphs", float(main["threshold"]))
+
+    (
+        outputs / "metrics" / "stage6_drone_test.json"
+    ).write_text(
+        json.dumps(rep, indent=2)
+    )
+
+    _examples(
+        model,
+        X,
+        Y,
+        dev,
+        outputs / "graphs",
+        float(main["threshold"]),
+    )
+
     return rep
 
 
