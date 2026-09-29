@@ -131,6 +131,36 @@ def sample_points(ee, stack, pts: np.ndarray, labels: np.ndarray, scale: int = 1
     return np.array(X, float), np.array(Y, int), np.array(keep, int)
 
 
+def background_inside(ee, region, n: int, seed: int) -> np.ndarray:
+    """Random points inside the country POLYGON, not its bounding box.
+
+    Sampling a lat/lon rectangle around India puts points in the Arabian Sea, the
+    Bay of Bengal and neighbouring countries. Those fall outside the clipped feature
+    stack and get dropped, which removes background points for a reason that has
+    nothing to do with mosquitoes and biases the comparison.
+    """
+    fc = ee.FeatureCollection.randomPoints(region=region, points=int(n), seed=int(seed))
+    coords = fc.geometry().coordinates().getInfo()
+    return np.array([[c[1], c[0]] for c in coords], float)     # -> (lat, lon)
+
+
+def drop_far_from(pts: np.ndarray, presence: np.ndarray, min_km: float) -> np.ndarray:
+    """Remove background points that sit within min_km of a presence record."""
+    if len(pts) == 0 or len(presence) == 0:
+        return pts
+    dlat = min_km / 111.32
+    occupied = set()
+    for lat, lon in presence:
+        dlon = min_km / (111.32 * max(math.cos(math.radians(lat)), 0.2))
+        occupied.add((int(lat / dlat), int(lon / dlon)))
+    keep = []
+    for lat, lon in pts:
+        dlon = min_km / (111.32 * max(math.cos(math.radians(lat)), 0.2))
+        if (int(lat / dlat), int(lon / dlon)) not in occupied:
+            keep.append((lat, lon))
+    return np.array(keep, float)
+
+
 def relative_humidity(temp_c: np.ndarray, dew_c: np.ndarray) -> np.ndarray:
     """Magnus formula: saturation vapour pressure at dew point / at air temperature."""
     e = lambda t: 6.112 * np.exp(17.67 * t / (t + 243.5))
@@ -138,7 +168,7 @@ def relative_humidity(temp_c: np.ndarray, dew_c: np.ndarray) -> np.ndarray:
 
 
 def build_training_table(cfg: dict, out_dir: Path, force: bool = False) -> dict:
-    from .occurrence import background_points, fetch_occurrences
+    from .occurrence import fetch_occurrences
 
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_p = out_dir / "risk_training_table.csv"
@@ -153,14 +183,15 @@ def build_training_table(cfg: dict, out_dir: Path, force: bool = False) -> dict:
 
     ee = init_ee(cfg)
     country = country_geometry(ee, s["country"])
-    bounds = country.bounds().coordinates().getInfo()[0]
-    lons = [c[0] for c in bounds]; lats = [c[1] for c in bounds]
-    bbox = (min(lats), max(lats), min(lons), max(lons))
 
-    n_bg = int(len(presence) * o["background_ratio"])
-    background = background_points(presence, bbox, n_bg, o["background_min_km"],
-                                   cfg["project"]["seed"])
-    print(f"background points generated: {len(background):,} (ratio {o['background_ratio']}:1)")
+    # Ask for extra background points, because some will land on cloud-masked pixels.
+    # They are trimmed back to the exact ratio AFTER sampling, so the ratio is honest.
+    n_wanted = int(len(presence) * o["background_ratio"])
+    over = float(o.get("background_oversample", 2.5))
+    background = background_inside(ee, country, int(n_wanted * over), cfg["project"]["seed"])
+    background = drop_far_from(background, presence, o["background_min_km"])
+    print(f"background points inside the country: {len(background):,} "
+          f"(asking for {over:g}x the {n_wanted:,} needed, trimmed after sampling)")
 
     pts = np.vstack([presence, background])
     labels = np.concatenate([np.ones(len(presence), int), np.zeros(len(background), int)])
@@ -172,6 +203,23 @@ def build_training_table(cfg: dict, out_dir: Path, force: bool = False) -> dict:
     X, Y, kept = sample_points(ee, stack, pts, labels, scale=s["grid_m"])
     if len(X) < 100:
         raise SystemExit("Almost every point was dropped. Check the season window and cloud filter.")
+
+    # How many of each class survived? Very different rates would mean the drops
+    # themselves carry information, which would bias the model.
+    keep_pres = float((Y == 1).sum()) / max(len(presence), 1)
+    keep_back = float((Y == 0).sum()) / max(len(background), 1)
+    print(f"  kept {100*keep_pres:.0f}% of presence points and {100*keep_back:.0f}% of background points")
+    if abs(keep_pres - keep_back) > 0.15:
+        print("  WARNING: the two classes were dropped at very different rates. "
+              "Check the cloud filter and season window before trusting the model.")
+
+    # Trim background down to the requested ratio, chosen at random.
+    n_keep_bg = min(int((Y == 1).sum() * o["background_ratio"]), int((Y == 0).sum()))
+    rng = np.random.default_rng(cfg["project"]["seed"])
+    bg_idx = np.where(Y == 0)[0]
+    sel = np.sort(np.concatenate([np.where(Y == 1)[0], rng.choice(bg_idx, n_keep_bg, replace=False)]))
+    X, Y, kept = X[sel], Y[sel], kept[sel]
+    print(f"  final table: {(Y == 1).sum():,} presence and {(Y == 0).sum():,} background rows")
 
     hum = relative_humidity(X[:, FEATURES.index("temp_c")], X[:, FEATURES.index("dew_c")])
     cols = FEATURES + ["humidity_pct"]
@@ -190,6 +238,7 @@ def build_training_table(cfg: dict, out_dir: Path, force: bool = False) -> dict:
         "presence_sampled": int((Y == 1).sum()), "background_sampled": int((Y == 0).sum()),
         "points_requested": int(len(pts)), "points_kept": int(len(X)),
         "dropped_masked_pixels": int(len(pts) - len(X)),
+        "kept_rate_presence": round(keep_pres, 3), "kept_rate_background": round(keep_back, 3),
         "features": cols, "scale_m": s["grid_m"], "s2_scenes": n_scenes,
         "season": f"{s['season_start']} to {s['season_end']}",
         "climate_years": s["climate_years"],

@@ -61,7 +61,7 @@ occurrence:
   thin_km: 1.0
   background_ratio: 5
   background_min_km: 1.0
-
+  background_oversample: 2.5
 
 
 risk_model:
