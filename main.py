@@ -317,13 +317,12 @@ def cmd_train_risk(args, cfg):
 
     return 0
 
-
 def cmd_train_drone(args, cfg):
     from vectorvision.vision.floodnet import build_cache, summarise
     from vectorvision.utils.config import get_device
 
     print("=" * 72)
-    print("STAGE 6 - drone water detector, trained from random initialisation")
+    print("STAGE 6 - drone water detector")
     print("=" * 72)
 
     root = p(cfg["paths"]["floodnet_root"])
@@ -365,6 +364,96 @@ def cmd_train_drone(args, cfg):
 
     out = p(cfg["paths"]["models_dir"]) / "drone_unet"
 
+    # ------------------------------------------------------------
+    # TEST ONLY: load the existing best.pt and do NOT retrain
+    # ------------------------------------------------------------
+    if args.test_only:
+        print("\n" + "=" * 72)
+        print("STAGE 6 TEST ONLY - using existing best.pt")
+        print("=" * 72)
+
+        best_model = out / "best.pt"
+
+        if not best_model.exists():
+            print(f"ERROR: saved model not found at {best_model}")
+            print("Train Stage 6 first before using --test-only.")
+            return 1
+
+        rep = test(
+            cfg,
+            cache,
+            out,
+            p(cfg["paths"]["outputs_dir"]),
+            dev,
+        )
+
+        if rep:
+            b = rep["best_by_frame_f1"]
+
+            print("\n" + "=" * 72)
+            print(
+                f"HELD-OUT TEST ({rep['test_images']} images, "
+                f"threshold {b['threshold']})"
+            )
+
+            print(
+                f"  frame F1       : {b['frame_f1']:.3f}"
+            )
+            print(
+                f"  precision      : {b['frame_precision']:.3f}"
+            )
+            print(
+                f"  recall         : {b['frame_recall']:.3f}"
+            )
+            print(
+                f"  accuracy       : {b['frame_accuracy']:.3f}"
+            )
+            print(
+                f"  water IoU      : {b['water_iou']:.3f}"
+            )
+
+            # New diagnostics from train_drone.py
+            if "frame_summary" in rep:
+                fs = rep["frame_summary"]
+
+                print("\nFRAME-LEVEL BASELINE COMPARISON")
+                print("-" * 72)
+
+                for key in [
+                    "frames",
+                    "frames_with_water",
+                    "prevalence",
+                    "frame_precision",
+                    "frame_recall",
+                    "frame_specificity",
+                    "frame_f1",
+                    "frame_accuracy",
+                    "frame_balanced_accuracy",
+                    "always_water_f1",
+                    "always_water_accuracy",
+                ]:
+                    if key in fs:
+                        value = fs[key]
+
+                        if isinstance(value, float):
+                            print(f"  {key:28s}: {value:.3f}")
+                        else:
+                            print(f"  {key:28s}: {value}")
+
+            print("\nmodel  :", best_model)
+            print(
+                "report :",
+                p(cfg["paths"]["outputs_dir"])
+                / "metrics"
+                / "stage6_drone_test.json",
+            )
+            print("=" * 72)
+
+        return 0
+
+    # ------------------------------------------------------------
+    # NORMAL TRAINING
+    # ------------------------------------------------------------
     res = train(
         cfg,
         cache,
