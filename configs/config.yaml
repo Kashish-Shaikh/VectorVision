@@ -21,7 +21,7 @@ earth_engine:
 paths:
   # Stage 1 locates the dataset inside this folder automatically.
   sen2lulc_root: data/satellite/sen2lulc
-  floodnet_root: data/drone/floodnet
+  floodnet_root: /kaggle/input/datasets/aletbm/aerial-imagery-dataset-floodnet-challenge/FloodNet%20Challenge%20-%20Track%201
   vectors_dir: data/vectors
   climate_dir: data/climate
   boundaries_dir: data/boundaries
@@ -42,12 +42,12 @@ satellite_unet:
   num_workers: 2
 
 drone_unet:
-  image_size: 256
+  image_size: 512
   base_width: 32
-  epochs: 40
-  batch_size: 16
-  lr: 0.001
-  num_workers: 2
+  epochs: 60
+  batch_size: 8
+  lr: 0.0005
+  water_classes: [1, 3, 5, 8]
 
   # FloodNet:
   # 3 = road flooded
