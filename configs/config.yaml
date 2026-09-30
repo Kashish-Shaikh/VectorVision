@@ -86,6 +86,17 @@ video:
   altitude_m: 30
   hfov_deg: 80
 
+fusion:
+  coarse_spacing_m: 1000
+  max_coarse_points: 6000
+  top_zones: 25
+  max_fine_points: 4000
+  reference_pool_m2: 50
+  max_cell_distance_km: 0.3
+  default_suitability: 0.5
+  frame_aspect: 1.0
+  top_targets: 12
+
 risk_model:
   n_estimators: 500
   pseudo_absence_ratio: 5     # Sinka et al. style presence : background
