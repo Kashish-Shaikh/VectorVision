@@ -30,7 +30,7 @@ STAGES = [
     (6, "train-drone",    "Drone water U-Net (from scratch) on FloodNet",       "ready"),
     (7, "infer-video", "Frame-by-frame video detection + tracking", "ready"),
     (8, "fuse",           "Breeding Site Priority Index + GPS targets",          "ready"),
-    (9, "mission",        "Waypoints, flight + payload-drop simulation",         "planned"),
+    (9, "mission",        "Waypoints, flight + payload-drop simulation",         "ready"),
     (10, "dashboard",     "Web dashboard",                                       "planned"),
 ]
 
@@ -643,6 +643,42 @@ def cmd_fuse(args, cfg):
 
     return 0
 
+def cmd_mission(args, cfg):
+    from vectorvision.drone.mission import plan_mission
+
+    print("=" * 72)
+    print("STAGE 9 - mission planning + payload-drop simulation")
+    print("=" * 72)
+
+    outputs = p(cfg["paths"]["outputs_dir"])
+    targets_path = outputs / "fusion" / "targets.json"
+    out_dir = outputs / "mission"
+
+    if not targets_path.exists():
+        print(f"Targets file not found: {targets_path}")
+        print("Run Stage 8 first:")
+        print("  python main.py fuse")
+        return 1
+
+    home = None
+    if args.home:
+        lat, lon = (float(x) for x in args.home.split(","))
+        home = (lat, lon)
+
+    result = plan_mission(
+        cfg,
+        targets_path,
+        out_dir,
+        home,
+    )
+
+    print("\n" + "=" * 72)
+    print("STAGE 9 DONE")
+    print("  mission plan : outputs/mission/mission.plan")
+    print("  report       : outputs/mission/mission_report.json")
+    print("=" * 72)
+
+    return 0
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
     sub = ap.add_subparsers(dest="cmd")
@@ -822,6 +858,18 @@ def main():
         help="number of targets/zones to print",
     )
 
+# ------------------------------------------------------------------
+# Stage 9
+# ------------------------------------------------------------------
+    mi = sub.add_parser("mission", help="Stage 9")
+
+    mi.add_argument(
+        "--home",
+        default=None,
+        metavar="LAT,LON",
+        help="home position for the mission, e.g. 21.45,80.19",
+    )
+
     # ------------------------------------------------------------------
     # General
     # ------------------------------------------------------------------
@@ -890,6 +938,8 @@ def main():
     if args.cmd == "fuse":
         sys.exit(cmd_fuse(args, cfg))
 
+    if args.cmd == "mission":
+        sys.exit(cmd_mission(args, cfg))
 
     cmd_stages(args, cfg)
 

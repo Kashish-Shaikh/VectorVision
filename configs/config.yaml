@@ -103,3 +103,39 @@ risk_model:
   n_estimators: 500
   pseudo_absence_ratio: 5     # Sinka et al. style presence : background
   spatial_block_deg: 1.0      # spatial cross-validation block size
+
+mission:
+  # Drop physics
+  release_height_m: 15
+  forward_speed_ms: 2.0
+  payload_mass_kg: 0.08
+  payload_diameter_m: 0.05
+  drag_coefficient: 0.47
+
+  # Position / flight uncertainty
+  gps_sigma_m: 1.0
+  wind_sigma_ms: 0.5
+  altitude_sigma_m: 0.5
+  release_latency_s: 0.15
+  latency_sigma_s: 0.05
+  speed_sigma_ms: 0.2
+
+  # Flight planning
+  cruise_speed_ms: 2.0
+  hover_speed_ms: 3.0
+  hover_per_target_s: 10
+  endurance_min: 12
+  reserve_fraction: 0.25
+  max_range_km: 1.0
+
+  # Servo / payload
+  servo_channel: 9
+  servo_open_us: 2000
+  servo_closed_us: 1000
+
+  # Safety
+  payload: water
+  registered: false
+
+  # Monte Carlo
+  trials: 2000
