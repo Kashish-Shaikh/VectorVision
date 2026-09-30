@@ -29,7 +29,7 @@ STAGES = [
     (5, "train-risk",     "Random Forest risk model + SHAP explanations",        "ready"),
     (6, "train-drone",    "Drone water U-Net (from scratch) on FloodNet",       "ready"),
     (7, "infer-video", "Frame-by-frame video detection + tracking", "ready"),
-    (8, "fuse",           "Breeding Site Priority Index + GPS targets",          "planned"),
+    (8, "fuse",           "Breeding Site Priority Index + GPS targets",          "ready"),
     (9, "mission",        "Waypoints, flight + payload-drop simulation",         "planned"),
     (10, "dashboard",     "Web dashboard",                                       "planned"),
 ]
@@ -542,6 +542,107 @@ def cmd_infer_video(args, cfg):
     print("=" * 72)
     return 0
 
+
+def cmd_fuse(args, cfg):
+    from vectorvision.fusion.grid import build_risk_map
+    from vectorvision.fusion.priority import fuse, top_zones
+
+    print("=" * 72)
+    print("STAGE 8 - Breeding Site Priority Index")
+    print("=" * 72)
+
+    outputs = p(cfg["paths"]["outputs_dir"])
+    fuse_dir = outputs / "fusion"
+    model = p(cfg["paths"]["models_dir"]) / "risk_rf" / "risk_rf.joblib"
+
+    if not model.exists():
+        print("Risk model not found. Run:  python main.py train-risk")
+        return 1
+
+    rm_path = fuse_dir / "risk_map.json"
+
+    if args.rebuild_map or not rm_path.exists():
+        risk_map = build_risk_map(cfg, model, fuse_dir)
+    else:
+        risk_map = json.loads(rm_path.read_text())
+        print(
+            f"using existing risk map: {len(risk_map['cells']):,} cells "
+            f"(--rebuild-map to redo)"
+        )
+
+    print("\nWHERE TO FLY (satellite side only)")
+    print(f"  {'rank':>4}{'lat':>11}{'lon':>11}{'score':>8}  reasons")
+
+    for i, z in enumerate(top_zones(risk_map, args.top), 1):
+        print(
+            f"  {i:>4}{z['lat']:>11.4f}{z['lon']:>11.4f}"
+            f"{z['suitability']:>8.3f}  "
+            f"{z['reasons'][0] if z['reasons'] else ''}"
+        )
+
+    vj = (
+        Path(args.video_json)
+        if args.video_json
+        else outputs / "metrics" / "stage7_video.json"
+    )
+
+    if not vj.exists():
+        print(
+            f"\nNo drone results yet ({vj.name}). Run Stage 7 on a flight video to"
+        )
+        print("turn these zones into confirmed GPS targets.")
+        print(f"\n  risk map : {fuse_dir / 'risk_map.json'}")
+        print("=" * 72)
+        return 0
+
+    video = json.loads(vj.read_text())
+
+    cell = None
+    if args.cell:
+        lat, lon = (float(x) for x in args.cell.split(","))
+        cell = {"lat": lat, "lon": lon}
+
+    res = fuse(risk_map, video, cfg, survey_cell=cell)
+    (fuse_dir / "targets.json").write_text(json.dumps(res, indent=2))
+
+    print(
+        f"\nCONFIRMED TARGETS: {res['targets_found']}   "
+        f"flight route {res['route_km']} km"
+    )
+
+    if res["targets"]:
+        print(
+            f"  {'visit':>5}{'PBI':>7}{'band':>10}{'area':>9}"
+            f"{'S':>6}{'C':>6}{'A':>6}   position"
+        )
+
+        for t in res["targets"][:args.top]:
+            f_ = t["factors"]
+
+            print(
+                f"  {t.get('visit_order', '-'):>5}"
+                f"{t['priority_index']:>7.3f}"
+                f"{t['band']:>10}"
+                f"{t['area_m2']:>7.1f} m2"
+                f"{f_['habitat_suitability']:>6.2f}"
+                f"{f_['drone_confirmation']:>6.2f}"
+                f"{f_['larval_capacity']:>6.2f}   "
+                f"{t['lat']:.4f}, {t['lon']:.4f}"
+            )
+
+        print("\n  top target reasons:")
+
+        for r in res["targets"][0]["reasons"]:
+            print(f"    - {r}")
+
+    print(f"\n  {res['index_definition']}")
+    print(f"  {res['caveat']}")
+    print(f"\n  risk map : {fuse_dir / 'risk_map.json'}")
+    print(f"  targets  : {fuse_dir / 'targets.json'}")
+    print("=" * 72)
+
+    return 0
+
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
     sub = ap.add_subparsers(dest="cmd")
@@ -689,6 +790,38 @@ def main():
         help="re-test the saved model without retraining",
     )
 
+
+    # ------------------------------------------------------------------
+    # Stage 8
+    # ------------------------------------------------------------------
+    fu = sub.add_parser("fuse", help="Stage 8")
+
+    fu.add_argument(
+        "--rebuild-map",
+        action="store_true",
+        help="re-score the district grid",
+    )
+
+    fu.add_argument(
+        "--video-json",
+        default=None,
+        help="Stage 7 output to fuse",
+    )
+
+    fu.add_argument(
+        "--cell",
+        default=None,
+        metavar="LAT,LON",
+        help="survey area centre, used when the flight had no telemetry",
+    )
+
+    fu.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        help="number of targets/zones to print",
+    )
+
     # ------------------------------------------------------------------
     # General
     # ------------------------------------------------------------------
@@ -753,6 +886,9 @@ def main():
 
     if args.cmd == "infer-video":
         sys.exit(cmd_infer_video(args, cfg))
+
+    if args.cmd == "fuse":
+        sys.exit(cmd_fuse(args, cfg))
 
 
     cmd_stages(args, cfg)
