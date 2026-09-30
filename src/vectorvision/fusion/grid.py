@@ -76,8 +76,9 @@ PLAIN = {
 
 
 def phrase(reason: dict) -> str:
-    name = PLAIN.get(reason["feature"], reason["feature"].replace("_", " "))
-    return f"{name} ({reason['value']}) {reason['direction']} the score"
+    """Value and effect in separate clauses, so the sentence cannot be misread."""
+    from .priority import phrase_reason
+    return phrase_reason(reason)
 
 
 def build_risk_map(cfg: dict, model_path: Path, out_dir: Path) -> dict:

@@ -96,6 +96,7 @@ fusion:
   default_suitability: 0.5
   frame_aspect: 1.0
   top_targets: 12
+  merge_distance_m: 25
 
 risk_model:
   n_estimators: 500

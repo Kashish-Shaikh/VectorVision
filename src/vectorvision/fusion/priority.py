@@ -38,6 +38,33 @@ from pathlib import Path
 
 import numpy as np
 
+PLAIN = {
+    "NDWI": "surface water signal", "MNDWI": "standing water signal",
+    "NDVI": "vegetation density", "slope_deg": "ground slope",
+    "hollow_m": "local dip where water collects", "dist_water_m": "distance to permanent water",
+    "rain_season_mm": "seasonal rainfall", "rain_30d_mm": "rainfall in the last 30 days",
+    "temp_c": "average temperature", "dew_c": "dew point", "humidity_pct": "humidity",
+    "elev_m": "elevation", "water_occurrence": "how often this place holds water",
+}
+UNITS = {"rain_season_mm": " mm", "rain_30d_mm": " mm", "temp_c": " C", "dew_c": " C",
+         "humidity_pct": "%", "elev_m": " m", "slope_deg": " deg", "dist_water_m": " m",
+         "hollow_m": " m"}
+
+
+def phrase_reason(r: dict) -> str:
+    """Keep the measured value and its effect in separate clauses.
+
+    'standing water signal (-0.288) raises the score' reads as a contradiction; the
+    number is the reading, not the effect. Splitting them removes the ambiguity.
+    """
+    name = PLAIN.get(r["feature"], r["feature"].replace("_", " "))
+    val = r.get("value")
+    unit = UNITS.get(r["feature"], "")
+    verb = "raises" if r.get("direction", "raises") == "raises" else "lowers"
+    if val is None:
+        return f"{name} {verb} the score"
+    return f"{name} here is {val}{unit}, which {verb} the score"
+
 
 # ------------------------------------------------------------------ index
 def confirmation(confidence: float, frames_seen: int, full_at_frames: int = 12) -> float:
@@ -90,6 +117,44 @@ def project_to_ground(lat: float, lon: float, alt_m: float, heading_deg: float |
                        -east * math.sin(t) + north * math.cos(t))
     return (round(lat + north / 111_320.0, 6),
             round(lon + east / (111_320.0 * math.cos(math.radians(lat))), 6))
+
+
+def offset_from_cell(lat: float, lon: float, fx: float, fy: float,
+                    alt_m: float, hfov_deg: float, aspect: float = 1.0):
+    """Approximate ground position when the flight had no telemetry.
+
+    Without a GPS fix every pool would collapse onto the survey centre, which
+    destroys the route and gives every pool the same suitability. The frame position
+    still says where a pool sat relative to the camera, so it is offset by that much
+    from the centre. Heading is unknown, so the offset is only as good as the
+    assumption that the drone was pointing north; positions are marked approximate.
+    """
+    return project_to_ground(lat, lon, alt_m, None, fx, fy, hfov_deg, aspect)
+
+
+def merge_nearby(targets: list[dict], min_sep_m: float) -> list[dict]:
+    """One water body seen as several blobs is still one site to visit.
+
+    Detections closer together than the separation distance are merged, keeping the
+    largest area and the strongest evidence, so a health worker gets a list of places
+    rather than a list of pixels.
+    """
+    kept: list[dict] = []
+    for t in sorted(targets, key=lambda x: -x["area_m2"]):
+        dup = False
+        for k in kept:
+            dlat = (k["lat"] - t["lat"]) * 111_320.0
+            dlon = (k["lon"] - t["lon"]) * 111_320.0 * math.cos(math.radians(k["lat"]))
+            if math.hypot(dlat, dlon) < min_sep_m:
+                k["merged_detections"] = k.get("merged_detections", 1) + 1
+                k["area_m2"] = round(k["area_m2"] + t["area_m2"], 2)
+                k["frames_seen"] = max(k["frames_seen"], t["frames_seen"])
+                k["confidence"] = round(max(k["confidence"], t["confidence"]), 3)
+                dup = True
+                break
+        if not dup:
+            kept.append(dict(t, merged_detections=1))
+    return kept
 
 
 def nearest_cell(cells: list[dict], lat: float, lon: float):
@@ -148,14 +213,17 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
                                    float(v["hfov_deg"]), aspect)
         source = "telemetry"
         if gp is None and survey_cell:
-            gp, source = (survey_cell["lat"], survey_cell["lon"]), "survey cell"
+            gp = offset_from_cell(survey_cell["lat"], survey_cell["lon"],
+                                  pool["frame_x"], pool["frame_y"],
+                                  float(v["altitude_m"]), float(v["hfov_deg"]), aspect)
+            source = "survey cell + frame offset (approximate)"
         if gp is None:
             continue                              # no location: cannot be a GPS target
 
         cell, dist_km = nearest_cell(cells, gp[0], gp[1])
         S = cell["suitability"] if cell and dist_km < f["max_cell_distance_km"] else f["default_suitability"]
         idx = priority_index(S, pool["confidence"], pool["frames_seen"], pool["area_m2"], ref)
-        reasons = [r["text"] for r in (cell["reasons"] if cell else [])][:3]
+        reasons = [phrase_reason(r) for r in (cell["reasons"] if cell else [])][:3]
         reasons.append(f"drone saw {pool['area_m2']} m2 of standing water across "
                        f"{pool['frames_seen']} frames")
         targets.append({
@@ -167,14 +235,34 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
             **idx, "reasons": reasons,
         })
 
+    n_raw = len(targets)
+    targets = merge_nearby(targets, float(f.get("merge_distance_m", 25)))
     targets.sort(key=lambda t: -t["priority_index"])
     order = route_order(targets) if targets else []
     for rank, i in enumerate(order, 1):
         targets[i]["visit_order"] = rank
 
+    bands = {b: sum(1 for t in targets if t["band"] == b)
+             for b in ("critical", "high", "moderate", "low")}
+    sui = [t["factors"]["habitat_suitability"] for t in targets]
+    notes = []
+    if targets and max(sui) - min(sui) < 0.01:
+        notes.append("Every target shares one suitability value, so the flight stayed inside "
+                     "a single scored cell. Fly a wider pass, or use telemetry, to let the "
+                     "satellite layer separate them.")
+    if targets and max(sui) < 0.2:
+        notes.append("Suitability is low everywhere in this flight: the drone found water in "
+                     "terrain the satellite model rates as poor habitat. That is the index "
+                     "working, not a bug, but it is worth flying one of the top-ranked zones.")
+    if any(t["location_source"].startswith("survey cell") for t in targets):
+        notes.append("Positions are approximate: no telemetry, so they were placed by frame "
+                     "offset from the survey centre assuming a north-facing camera.")
+
     return {
         "district": risk_map["meta"]["district"],
+        "detections_before_merge": n_raw,
         "targets_found": len(targets),
+        "bands": bands, "notes": notes,
         "route_km": round(route_length_km(targets, order), 3) if len(order) > 1 else 0.0,
         "reference_pool_m2": ref,
         "targets": targets,
