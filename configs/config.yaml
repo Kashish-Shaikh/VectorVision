@@ -97,6 +97,7 @@ fusion:
   frame_aspect: 1.0
   top_targets: 12
   merge_distance_m: 25
+  large_body_m2: 500
 
 risk_model:
   n_estimators: 500

@@ -224,8 +224,6 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
         S = cell["suitability"] if cell and dist_km < f["max_cell_distance_km"] else f["default_suitability"]
         idx = priority_index(S, pool["confidence"], pool["frames_seen"], pool["area_m2"], ref)
         reasons = [phrase_reason(r) for r in (cell["reasons"] if cell else [])][:3]
-        reasons.append(f"drone saw {pool['area_m2']} m2 of standing water across "
-                       f"{pool['frames_seen']} frames")
         targets.append({
             "lat": gp[0], "lon": gp[1], "location_source": source,
             "area_m2": pool["area_m2"], "confidence": pool["confidence"],
@@ -237,6 +235,23 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
 
     n_raw = len(targets)
     targets = merge_nearby(targets, float(f.get("merge_distance_m", 25)))
+    # Merging changes the area, so the index and the wording must be recomputed from
+    # the merged figures, or the printed area and the stated reason disagree.
+    big = float(f.get("large_body_m2", 500))
+    for t in targets:
+        t.update(priority_index(t["factors"]["habitat_suitability"], t["confidence"],
+                                t["frames_seen"], t["area_m2"], ref))
+        seen = f"drone saw {t['area_m2']} m2 of standing water across {t['frames_seen']} frames"
+        if t.get("merged_detections", 1) > 1:
+            seen += f" ({t['merged_detections']} detections merged)"
+        t["reasons"] = list(t["reasons"]) + [seen]
+        # A lake is not a puddle. Anopheles larvae favour small, shallow, sunlit
+        # water; large permanent bodies usually hold fish and wave action. The index
+        # is left alone (no invented penalty) but the site is flagged for the operator.
+        t["likely_permanent_water"] = bool(t["area_m2"] >= big)
+        if t["likely_permanent_water"]:
+            t["reasons"].append("large water body: likely permanent, check before treating "
+                                "as a breeding puddle")
     targets.sort(key=lambda t: -t["priority_index"])
     order = route_order(targets) if targets else []
     for rank, i in enumerate(order, 1):
@@ -254,6 +269,11 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
         notes.append("Suitability is low everywhere in this flight: the drone found water in "
                      "terrain the satellite model rates as poor habitat. That is the index "
                      "working, not a bug, but it is worth flying one of the top-ranked zones.")
+    n_big = sum(1 for t in targets if t.get("likely_permanent_water"))
+    if n_big:
+        notes.append(f"{n_big} target(s) are larger than {int(big)} m2 and are probably "
+                     "permanent water, not breeding puddles. Anopheles prefer small sunlit "
+                     "pools, so check these before treating them as priority sites.")
     if any(t["location_source"].startswith("survey cell") for t in targets):
         notes.append("Positions are approximate: no telemetry, so they were placed by frame "
                      "offset from the survey centre assuming a north-facing camera.")
@@ -276,5 +296,6 @@ def top_zones(risk_map: dict, n: int = 10) -> list[dict]:
     """Where to fly next, from the satellite side alone, before any drone data."""
     cells = sorted(risk_map["cells"], key=lambda c: -c["suitability"])[:n]
     return [{"lat": c["lat"], "lon": c["lon"], "suitability": c["suitability"],
-             "severity": c["severity"], "reasons": [r["text"] for r in c["reasons"][:3]]}
+             "severity": c["severity"],
+             "reasons": [phrase_reason(r) for r in c["reasons"][:3]]}
             for c in cells]
