@@ -28,7 +28,7 @@ STAGES = [
     (4, "build-features", "Gondiya 100 m grid + vector-occurrence training set", "ready"),
     (5, "train-risk",     "Random Forest risk model + SHAP explanations",        "ready"),
     (6, "train-drone",    "Drone water U-Net (from scratch) on FloodNet",       "ready"),
-    (7, "infer-video",    "Frame-by-frame video detection + tracking",           "planned"),
+    (7, "infer-video", "Frame-by-frame video detection + tracking", "ready"),
     (8, "fuse",           "Breeding Site Priority Index + GPS targets",          "planned"),
     (9, "mission",        "Waypoints, flight + payload-drop simulation",         "planned"),
     (10, "dashboard",     "Web dashboard",                                       "planned"),
@@ -501,6 +501,46 @@ def cmd_train_drone(args, cfg):
 
     return 0
 
+def cmd_infer_video(args, cfg):
+    from vectorvision.utils.config import get_device
+    from vectorvision.vision.run_video import run_simulation, run_video
+
+    print("=" * 72)
+    print("STAGE 7 - frame-by-frame detection on drone video")
+    print("=" * 72)
+    dev = get_device(cfg["project"].get("device", "auto"))
+    models = p(cfg["paths"]["models_dir"]) / "drone_unet"
+    outputs = p(cfg["paths"]["outputs_dir"])
+
+    if args.simulate or not args.video:
+        if not args.simulate:
+            print("No --video given, so measuring the temporal filter on held-out images instead.\n")
+        rep = run_simulation(cfg, outputs / "cache_floodnet", models, outputs, dev,
+                             args.images, args.steps)
+        r, s = rep["per_frame_raw"], rep["after_persistence_filter"]
+        print(f"simulated flights over {rep['images']} held-out images, "
+              f"{rep['total_frames']} frames, prevalence {rep['prevalence']:.3f}")
+        print(f"\n{'':<22}{'per frame':>12}{'after filter':>14}{'change':>10}")
+        for k in ("precision", "recall", "specificity", "f1", "balanced_accuracy"):
+            print(f"  {k:<20}{r[k]:>12.3f}{s[k]:>14.3f}{rep['change'][k]:>+10.3f}")
+        print(f"\n  false alarms: {r['fp']} -> {s['fp']}   missed frames: {r['fn']} -> {s['fn']}")
+        print("\n  report : outputs/metrics/stage7_filter_eval.json")
+    else:
+        res = run_video(cfg, Path(args.video), models, outputs, dev)
+        print(f"\nframes analysed     : {res['frames_analysed']}")
+        print(f"frames with water   : {res['frames_raw_water']} raw -> "
+              f"{res['frames_after_filter']} after the persistence filter")
+        print(f"pools               : {res['raw_tracks']} tracked -> "
+              f"{res['confirmed_pools']} confirmed")
+        if res["pools"]:
+            print(f"\n  {'severity':<10}{'area':>10}{'conf':>7}{'frames':>8}{'time':>14}")
+            for x in res["pools"][:10]:
+                print(f"  {x['severity']:<10}{x['area_m2']:>8.1f} m2{x['confidence']:>7.2f}"
+                      f"{x['frames_seen']:>8}{x['t_start_s']:>8.1f}-{x['t_end_s']:.1f}s")
+        print("\n  report : outputs/metrics/stage7_video.json")
+        print("  frames : outputs/graphs/stage7_frames.png")
+    print("=" * 72)
+    return 0
 
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
@@ -652,8 +692,41 @@ def main():
     # ------------------------------------------------------------------
     # General
     # ------------------------------------------------------------------
-    sub.add_parser("stages", help="list stages")
+    # ------------------------------------------------------------------
+    # Stage 7
+    # ------------------------------------------------------------------
+    iv = sub.add_parser("infer-video", help="Stage 7")
 
+    iv.add_argument(
+        "--video",
+        default=None,
+        help="path to an MP4 from the drone",
+    )
+
+    iv.add_argument(
+        "--simulate",
+        action="store_true",
+        help="measure the temporal filter on held-out FloodNet images",
+    )
+
+    iv.add_argument(
+        "--images",
+        type=int,
+        default=20,
+        help="images to simulate flights over",
+    )
+
+    iv.add_argument(
+        "--steps",
+        type=int,
+        default=12,
+        help="frames per simulated flight",
+    )
+
+    # ------------------------------------------------------------------
+    # General
+    # ------------------------------------------------------------------
+    sub.add_parser("stages", help="list stages")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -677,6 +750,10 @@ def main():
 
     if args.cmd == "train-drone":
         sys.exit(cmd_train_drone(args, cfg))
+
+    if args.cmd == "infer-video":
+        sys.exit(cmd_infer_video(args, cfg))
+
 
     cmd_stages(args, cfg)
 

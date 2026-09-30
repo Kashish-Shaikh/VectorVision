@@ -28,6 +28,7 @@ paths:
   models_dir: models
   outputs_dir: outputs
 
+
 satellite_unet:
   in_channels: 3          # Sen-2 LULC ships RGB (B4, B3, B2) only
   base_width: 32
@@ -73,6 +74,17 @@ occurrence:
   background_min_km: 1.0
   background_oversample: 2.5
 
+video:
+  every_n: 5
+  max_frames: 600
+  prob_threshold: 0.7
+  min_pool_px: 262
+  persist_window: 5
+  persist_votes: 3
+  match_radius: 0.15
+  max_gap: 5
+  altitude_m: 30
+  hfov_deg: 80
 
 risk_model:
   n_estimators: 500
