@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vector Vision</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#FFF8F1; --panel:#FFFFFF; --panel-2:#FFF3E8; --ink:#3B2622; --ink-2:#7A5F55; --ink-3:#A88E82;
+  --rule:#F0DFD0; --rule-2:#E2CBB6; --ember:#D9622B; --marigold:#E89A2E; --peach:#FFE3CC; --apricot:#FFD0B0;
+  --water:#1A7F8A; --water-soft:#E0F1F2;
+  --s-low:#8FAE6A; --s-mod:#E3B04B; --s-high:#E0773A; --s-crit:#C23B3B;
+  --ok:#5E8C45; --stop:#C23B3B;
+  --shadow:0 1px 2px rgba(120,70,40,.07),0 6px 18px rgba(120,70,40,.06);
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+body{background:var(--page);color:var(--ink);font-family:"Plus Jakarta Sans",system-ui,sans-serif;font-size:14.5px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}button{cursor:pointer}
+a{color:var(--ember)}
+:focus-visible{outline:2px solid var(--ember);outline-offset:2px;border-radius:6px}
+
+header{background:linear-gradient(112deg,var(--peach),var(--apricot) 55%,#FFC98A);padding:16px 24px 0}
+.tline{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.02em}
+.place{font-size:14px;font-weight:600;color:#7A4522}
+.pill{margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;
+  background:rgba(255,255,255,.62);border:1px solid rgba(160,90,40,.18);font-size:12.5px}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--ok);font-style:normal}
+nav{display:flex;gap:3px;margin-top:14px;overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+.tab{padding:11px 16px 12px;border:none;background:transparent;color:#87502A;border-radius:11px 11px 0 0;
+  white-space:nowrap;font-weight:600;font-size:13.5px}
+.tab:hover{background:rgba(255,255,255,.4)}
+.tab[aria-selected="true"]{background:var(--page);color:var(--ink)}
+
+main{padding:20px 24px 40px;max-width:1400px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+.intro{max-width:72ch;color:var(--ink-2);margin:0 0 16px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--shadow)}
+.pad{padding:18px 20px}
+h2{font-size:17px;font-weight:700;margin:0 0 4px}
+h3{font-size:13.5px;font-weight:700;margin:18px 0 9px}
+.sub{color:var(--ink-2);font-size:13.5px;margin:0 0 14px}
+.muted{color:var(--ink-3);font-size:12.5px}
+
+.stages{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px}
+.st{border:1px solid var(--rule);border-radius:12px;padding:14px 15px;background:var(--panel)}
+.st.off{background:var(--panel-2);border-style:dashed}
+.st .n{font-size:11.5px;font-weight:700;color:var(--ink-3);letter-spacing:1px}
+.st b{display:block;font-size:14.5px;margin:3px 0 6px}
+.st .big{font-size:22px;font-weight:700;color:var(--ember);letter-spacing:-.02em}
+.st .d{font-size:12.5px;color:var(--ink-2);margin-top:4px}
+
+.mapbox{position:relative;height:clamp(420px,66vh,700px);border-radius:16px;overflow:hidden;background:var(--panel-2)}
+canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
+.mkey{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.93);border:1px solid var(--rule);
+  border-radius:12px;padding:9px 12px;box-shadow:var(--shadow);font-size:12px;color:var(--ink-2)}
+.ramp{display:flex;gap:2px;margin:5px 0 3px}.ramp span{width:28px;height:8px;border-radius:2px}
+.ends{display:flex;justify-content:space-between}
+.kline{display:flex;align-items:center;gap:6px;margin-top:6px}
+.kdot{width:11px;height:11px;border-radius:50%;border:2.5px solid var(--ember);background:#fff}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--page);padding:6px 10px;
+  border-radius:8px;font-size:12px;white-space:nowrap;opacity:0;transition:opacity .12s}
+.tip.on{opacity:1}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:6px;color:#fff;font-size:12px;font-weight:600;text-transform:capitalize}
+.b-low{background:var(--s-low)}.b-moderate{background:var(--s-mod)}.b-high{background:var(--s-high)}.b-critical{background:var(--s-crit)}
+.reads{display:flex;flex-direction:column;gap:7px;margin:14px 0}
+.read{display:flex;gap:10px;align-items:baseline;padding:9px 11px;background:var(--panel-2);border-radius:10px}
+.read u{text-decoration:none;color:var(--ink-3);font-size:11.5px;min-width:104px}
+.read b{font-weight:700;font-size:13.5px}
+.reason{padding:8px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.reason:last-child{border:none}
+.bar{height:5px;background:var(--rule);border-radius:3px;margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px;background:var(--ember)}
+.bar i.dn{background:var(--water)}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:700;font-size:12.5px;color:var(--ink-2);padding:10px 12px;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:11px 12px;border-bottom:1px solid var(--rule);vertical-align:middle}
+tr:hover td{background:var(--panel-2)}
+.tablewrap{overflow-x:auto}
+.factors{display:inline-flex;gap:3px;align-items:center}
+.fbar{width:34px;height:7px;background:var(--rule);border-radius:3px;overflow:hidden}
+.fbar i{display:block;height:100%;background:var(--marigold)}
+
+.note{border-left:3px solid var(--ember);background:var(--panel-2);padding:12px 14px;border-radius:0 10px 10px 0;font-size:13px;color:var(--ink-2);margin:10px 0}
+.note b{color:var(--ink)}
+.check{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--rule)}
+.check:last-child{border:none}
+.tagok,.tagstop{font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;color:#fff;flex:none;margin-top:1px}
+.tagok{background:var(--ok)}.tagstop{background:var(--stop)}
+.empty{padding:34px 20px;text-align:center;color:var(--ink-2)}
+.empty code{background:var(--panel-2);padding:2px 7px;border-radius:5px;font-size:13px}
+.sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 16px}
+.sumgrid div{background:var(--panel-2);border-radius:12px;padding:12px 14px}
+.sumgrid b{display:block;font-size:21px;font-weight:700}
+.sumgrid span{font-size:12px;color:var(--ink-2)}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 17px;font-weight:600;
+  font-size:13.5px;border:1px solid var(--rule-2);background:var(--panel);text-decoration:none;color:var(--ink)}
+.btn.primary{background:linear-gradient(110deg,var(--ember),var(--marigold));color:#fff;border-color:transparent}
+@media (max-width:1000px){.grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="tline">
+    <h1>Vector Vision</h1>
+    <span class="place" id="place">loading…</span>
+    <span class="pill"><i></i><span id="conn">reading results</span></span>
+  </div>
+  <nav role="tablist">
+    <button class="tab" role="tab" data-v="overview" aria-selected="true">Overview</button>
+    <button class="tab" role="tab" data-v="map" aria-selected="false">Risk map</button>
+    <button class="tab" role="tab" data-v="targets" aria-selected="false">Targets</button>
+    <button class="tab" role="tab" data-v="mission" aria-selected="false">Mission</button>
+    <button class="tab" role="tab" data-v="limits" aria-selected="false">What this cannot say</button>
+  </nav>
+</header>
+
+<main>
+  <section class="view on" id="v-overview">
+    <p class="intro">Every number below was measured by a stage of the pipeline on data the model
+      had not seen. Stages that have not run say so rather than showing a placeholder.</p>
+    <div class="stages" id="stages"></div>
+    <div class="panel pad" style="margin-top:18px" id="modelcard"></div>
+  </section>
+
+  <section class="view" id="v-map">
+    <p class="intro">Each square is a 100 m patch scored for habitat suitability. Click one to see
+      why it scored that way.</p>
+    <div class="grid">
+      <div class="panel mapbox">
+        <canvas id="map" aria-label="District risk map. Click a cell to inspect it."></canvas>
+        <div class="mkey">
+          Habitat suitability
+          <div class="ramp"><span style="background:var(--s-low)"></span><span style="background:var(--s-mod)"></span><span style="background:var(--s-high)"></span><span style="background:var(--s-crit)"></span></div>
+          <div class="ends"><span>low</span><span>critical</span></div>
+          <div class="kline"><span class="kdot"></span> confirmed target</div>
+        </div>
+        <div class="tip" id="tip"></div>
+      </div>
+      <div class="panel pad" id="inspector"></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-targets">
+    <p class="intro">Pools the drone confirmed, ranked by the Breeding Site Priority Index.</p>
+    <div class="panel" id="targets"></div>
+  </section>
+
+  <section class="view" id="v-mission">
+    <p class="intro">The flight plan, the simulated water-only drop, and the checks that must pass
+      before anyone flies.</p>
+    <div class="grid"><div class="panel pad" id="mission"></div><div class="panel pad" id="safety"></div></div>
+  </section>
+
+  <section class="view" id="v-limits">
+    <p class="intro">Stated plainly, because a judge will ask and the honest answer is stronger
+      than a vague one.</p>
+    <div class="panel pad" id="limits"></div>
+  </section>
+</main>
+
+<script>
+const TOWNS=[{n:"Gondia",lat:21.4598,lon:80.1950,hq:true},{n:"Tirora",lat:21.4072,lon:79.9326},
+ {n:"Goregaon",lat:21.3422,lon:80.1931},{n:"Amgaon",lat:21.3722,lon:80.3806},
+ {n:"Salekasa",lat:21.3046,lon:80.4927},{n:"Deori",lat:21.0725,lon:80.3669},
+ {n:"Sadak Arjuni",lat:21.1000,lon:80.1500},{n:"Arjuni Morgaon",lat:20.8176,lon:80.0311}];
+const S={status:null,map:null,targets:null,mission:null,metrics:null,hot:null};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num=(v,d=3)=>v==null?"–":Number(v).toFixed(d);
+async function get(p){const r=await fetch(p);if(!r.ok)return null;return r.json()}
+const km=(a,b,c,d)=>Math.hypot((c-a)*111.32,(d-b)*111.32*Math.cos(a*Math.PI/180));
+function near(lat,lon){let best=null,bd=1e9;for(const t of TOWNS){const d=km(t.lat,t.lon,lat,lon);if(d<bd){bd=d;best=t}}
+  if(!best)return{text:"",town:"—"};
+  const dir=["N","NE","E","SE","S","SW","W","NW"][Math.round((((Math.atan2(Math.sin((lon-best.lon)*Math.PI/180)*Math.cos(lat*Math.PI/180),
+    Math.cos(best.lat*Math.PI/180)*Math.sin(lat*Math.PI/180)-Math.sin(best.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.cos((lon-best.lon)*Math.PI/180))*180/Math.PI)+360)%360)/45)%8];
+  return{town:best.n,d:bd,text:bd<1.2?`in ${best.n}`:`${bd.toFixed(1)} km ${dir} of ${best.n}`}}
+const gmaps=(a,b)=>`https://www.google.com/maps?q=${a},${b}`;
+
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected",x===b));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.id==="v-"+b.dataset.v));
+  if(b.dataset.v==="map")draw();scrollTo({top:0,behavior:"instant"})});
+
+/* ---------- overview ---------- */
+function renderOverview(){
+  const st=S.status;
+  $("stages").innerHTML=st.stages.map(s=>`<div class="st ${s.done?"":"off"}">
+    <div class="n">STAGE ${s.stage}</div><b>${esc(s.name)}</b>
+    ${s.done?`<div class="big num">${esc(s.headline)}</div>`:`<div class="muted">not run yet</div>`}
+    <div class="d">${esc(s.detail)}</div></div>`).join("");
+
+  const m=S.metrics||{};
+  let rows=[];
+  if(m.stage3){const w=m.stage3.cleaned_labels.per_class[m.stage3.water_index];
+    rows.push(["Land cover, mean IoU",num(m.stage3.cleaned_labels.mean_iou),
+      `95% CI ${num(m.stage3.cleaned_labels.ci95.mean_iou[0])}–${num(m.stage3.cleaned_labels.ci95.mean_iou[1])}, ${m.stage3.test_tiles.toLocaleString()} unseen tiles`]);
+    rows.push(["Water from satellite, IoU",num(w.iou),`recall ${num(w.recall,2)}, limited by RGB-only bands and label noise`])}
+  if(m.stage5){const s5=m.stage5;
+    rows.push(["Habitat risk, ROC-AUC",num(s5.spatial_cv.roc_auc),
+      `spatially blocked CV; shuffled labels ${num(s5.label_shuffle_control.roc_auc)}, coordinates only ${num(s5.coords_only_control.roc_auc)}`])}
+  if(m.stage6){const b=m.stage6.best_by_frame_f1;
+    rows.push(["Drone water, IoU",num(b.water_iou),`${m.stage6.test_images} held-out FloodNet images`]);
+    if(b.baseline_always_water_f1!=null)
+      rows.push(["Drone frame F1",num(b.frame_f1),`always-say-water baseline ${num(b.baseline_always_water_f1)}, specificity ${num(b.frame_specificity,2)}`])}
+  if(m.stage7){const r=m.stage7.per_frame_raw,f=m.stage7.after_persistence_filter;
+    rows.push(["Persistence filter",`${num(r.specificity,2)} → ${num(f.specificity,2)}`,
+      `specificity on ${m.stage7.total_frames} simulated frames; recall ${num(r.recall,2)} → ${num(f.recall,2)}`])}
+  $("modelcard").innerHTML=`<h2>Measured results</h2>
+    <p class="sub">Each from a held-out split the model never trained on.</p>
+    ${rows.length?`<div class="tablewrap"><table><thead><tr><th>Metric</th><th>Value</th><th>How it was measured</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td><b>${esc(r[0])}</b></td><td class="num">${esc(r[1])}</td><td class="muted">${esc(r[2])}</td></tr>`).join("")}</tbody></table></div>`
+    :`<div class="empty"><p>No metrics yet. Run the stages, then refresh.</p></div>`}`;
+}
+
+/* ---------- map ---------- */
+const cv=$("map"),cx=cv.getContext("2d");let BASE=null;
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const SEV={low:"--s-low",moderate:"--s-mod",high:"--s-high",critical:"--s-crit"};
+function draw(){
+  if(!S.map||!cv.clientWidth)return;
+  const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  cv.width=w*dpr;cv.height=h*dpr;cx.setTransform(dpr,0,0,dpr,0,0);
+  const cells=S.map.cells,pts=cells.map(c=>[c.lat,c.lon]).concat(TOWNS.map(t=>[t.lat,t.lon]));
+  const la=pts.map(p=>p[0]),lo=pts.map(p=>p[1]),pad=.02;
+  const a0=Math.min(...la)-pad,a1=Math.max(...la)+pad,o0=Math.min(...lo)-pad,o1=Math.max(...lo)+pad;
+  const kx=Math.cos((a0+a1)/2*Math.PI/180);
+  const s=Math.min(w/((o1-o0)*kx||1),h/(a1-a0||1))*0.9;
+  const P=(lat,lon)=>[w/2+(lon-(o0+o1)/2)*kx*s,h/2-(lat-(a0+a1)/2)*s];
+  BASE={P,w,h,s};
+  cx.fillStyle=css("--panel-2");cx.fillRect(0,0,w,h);
+  // graticule
+  cx.strokeStyle="rgba(140,95,60,.14)";cx.lineWidth=1;cx.fillStyle=css("--ink-3");cx.font='11px "Plus Jakarta Sans",sans-serif';
+  for(let v=Math.ceil(o0*10)/10;v<o1;v+=0.1){const[x]=P(a0,v);cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,h-16);cx.stroke();cx.fillText(v.toFixed(1)+"°E",x+3,h-4)}
+  for(let v=Math.ceil(a0*10)/10;v<a1;v+=0.1){const y=P(v,o0)[1];cx.beginPath();cx.moveTo(0,y);cx.lineTo(w,y);cx.stroke();cx.fillText(v.toFixed(1)+"°N",4,y-3)}
+  // cells
+  const sorted=cells.slice().sort((a,b)=>a.suitability-b.suitability);
+  for(const c of sorted){const[x,y]=P(c.lat,c.lon),z=5+c.suitability*7;
+    cx.globalAlpha=.55+c.suitability*.45;cx.fillStyle=css(SEV[c.severity]||"--s-low");cx.fillRect(x-z/2,y-z/2,z,z);
+    if(c===S.hot){cx.globalAlpha=1;cx.strokeStyle=css("--ink");cx.lineWidth=2;cx.strokeRect(x-z/2-4,y-z/2-4,z+8,z+8)}}
+  cx.globalAlpha=1;
+  // towns
+  for(const t of TOWNS){const[x,y]=P(t.lat,t.lon);if(x<0||y<0||x>w||y>h)continue;
+    cx.fillStyle="#6B4A38";cx.beginPath();cx.arc(x,y,t.hq?4.5:3,0,7);cx.fill();
+    cx.strokeStyle="#fff";cx.lineWidth=1.5;cx.stroke();
+    cx.font=(t.hq?"700 ":"500 ")+'12px "Plus Jakarta Sans",sans-serif';
+    cx.strokeStyle="rgba(255,248,241,.9)";cx.lineWidth=3;cx.strokeText(t.n,x+7,y+4);
+    cx.fillStyle="#4A3226";cx.fillText(t.n,x+7,y+4)}
+  // confirmed targets
+  for(const t of (S.targets?.targets||[])){const[x,y]=P(t.lat,t.lon);
+    cx.lineWidth=3;cx.strokeStyle=css("--ember");cx.fillStyle="#fff";
+    cx.beginPath();cx.arc(x,y,7,0,7);cx.fill();cx.stroke()}
+}
+function pick(mx,my){if(!BASE||!S.map)return null;let best=null,bd=400;
+  for(const c of S.map.cells){const[x,y]=BASE.P(c.lat,c.lon),d=(x-mx)**2+(y-my)**2;if(d<bd){bd=d;best=c}}return best}
+cv.addEventListener("click",e=>{const r=cv.getBoundingClientRect();const c=pick(e.clientX-r.left,e.clientY-r.top);
+  if(c){S.hot=c;inspect(c);draw()}});
+cv.addEventListener("mousemove",e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const c=pick(mx,my),tip=$("tip");
+  if(c){const n=near(c.lat,c.lon);tip.textContent=`${n.text} · ${c.severity}`;tip.style.left=(mx+14)+"px";tip.style.top=(my-8)+"px";tip.classList.add("on")}
+  else tip.classList.remove("on")});
+
+function topList(){
+  if(!S.map)return $("inspector").innerHTML=`<div class="empty"><p>No risk map yet.</p><code>python main.py fuse</code></div>`;
+  const top=S.map.cells.slice().sort((a,b)=>b.suitability-a.suitability).slice(0,8);
+  $("inspector").innerHTML=`<h2>Survey these first</h2><p class="sub">Highest suitability in the scored area.</p>
+    ${top.map((c,i)=>{const n=near(c.lat,c.lon);return `<div class="reason"><b>${i+1}. ${esc(n.town)}</b>
+      <span class="badge b-${c.severity}" style="float:right">${c.severity}</span>
+      <div class="muted">${esc(n.text)} · score ${num(c.suitability)}</div></div>`}).join("")}`;
+}
+function inspect(c){
+  const n=near(c.lat,c.lon),mx=Math.max(...c.reasons.map(r=>Math.abs(r.effect)),.001);
+  $("inspector").innerHTML=`<span class="badge b-${c.severity}">${c.severity}</span>
+    <h2 style="margin-top:10px">${esc(n.text)}</h2>
+    <p class="muted num">${c.lat.toFixed(4)}° N, ${c.lon.toFixed(4)}° E · 100 m × 100 m</p>
+    <div class="reads">
+      <div class="read"><u>Suitability</u><b class="num">${num(c.suitability)}</b></div>
+      <div class="read"><u>Water signal</u><b class="num">${c.ndwi>=0?"+":""}${c.ndwi}</b></div>
+      <div class="read"><u>Slope</u><b class="num">${c.slope}°</b></div>
+      <div class="read"><u>Rain, season</u><b class="num">${c.rain} mm</b></div>
+      <div class="read"><u>Temperature</u><b class="num">${c.temp} °C</b></div>
+      <div class="read"><u>To permanent water</u><b class="num">${(c.dist_water/1000).toFixed(1)} km</b></div>
+    </div>
+    <h3>Why it scored this way</h3>
+    ${c.reasons.map(r=>`<div class="reason">${esc(r.text||r.feature)}
+      <div class="bar"><i class="${r.effect>0?"":"dn"}" style="width:${Math.abs(r.effect)/mx*100}%"></i></div></div>`).join("")}
+    <div style="margin-top:14px"><a class="btn" href="${gmaps(c.lat,c.lon)}" target="_blank" rel="noopener">Directions</a>
+      <button class="btn" onclick="S.hot=null;topList();draw()">Back</button></div>`;
+}
+
+/* ---------- targets ---------- */
+function renderTargets(){
+  const t=S.targets;
+  if(!t||!t.targets?.length)return $("targets").innerHTML=`<div class="empty">
+    <p>No confirmed targets yet. Analyse a flight video, then fuse it with the risk map.</p>
+    <code>python main.py infer-video --video flight.mp4</code> &nbsp; <code>python main.py fuse</code></div>`;
+  const f=t.targets;
+  $("targets").innerHTML=`<div class="pad">
+    <div class="sumgrid">
+      <div><b class="num">${t.targets_found}</b><span>sites to visit</span></div>
+      <div><b class="num">${t.detections_before_merge ?? "–"}</b><span>raw detections merged</span></div>
+      <div><b class="num">${t.route_km} km</b><span>flight route</span></div>
+      <div><b class="num">${f.reduce((a,x)=>a+x.area_m2,0).toFixed(0)} m²</b><span>standing water</span></div>
+    </div>
+    ${(t.notes||[]).map(n=>`<div class="note">${esc(n)}</div>`).join("")}
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Visit</th><th>Priority</th><th>Where</th><th>Area</th>
+      <th>S × C × A</th><th>Why</th><th></th></tr></thead><tbody>
+    ${f.map(x=>{const n=near(x.lat,x.lon),fa=x.factors;return `<tr>
+      <td class="num">${x.visit_order ?? "–"}</td>
+      <td><b class="num">${num(x.priority_index)}</b><div><span class="badge b-${x.band}">${x.band}</span></div></td>
+      <td><b>${esc(n.text)}</b><div class="muted num">${x.lat.toFixed(4)}, ${x.lon.toFixed(4)}</div>
+        <div class="muted">${esc(x.location_source||"")}</div></td>
+      <td class="num">${x.area_m2} m²${x.likely_permanent_water?'<div class="muted">likely permanent</div>':""}</td>
+      <td><span class="factors">${[fa.habitat_suitability,fa.drone_confirmation,fa.larval_capacity]
+        .map(v=>`<span class="fbar"><i style="width:${v*100}%"></i></span>`).join("")}</span>
+        <div class="muted num">${num(fa.habitat_suitability,2)} · ${num(fa.drone_confirmation,2)} · ${num(fa.larval_capacity,2)}</div></td>
+      <td class="muted">${(x.reasons||[]).slice(0,2).map(esc).join("<br>")}</td>
+      <td><a class="btn" href="${gmaps(x.lat,x.lon)}" target="_blank" rel="noopener">Map</a></td></tr>`}).join("")}
+    </tbody></table></div>
+    <div class="pad"><div class="note"><b>${esc(t.index_definition||"")}</b><br>${esc(t.caveat||"")}</div></div>`;
+}
+
+/* ---------- mission ---------- */
+function renderMission(){
+  const m=S.mission;
+  if(!m)return $("mission").innerHTML=`<div class="empty"><p>No mission yet.</p><code>python main.py mission</code></div>`,
+    $("safety").innerHTML="";
+  const d=m.drop_simulation,f=m.feasibility;
+  $("mission").innerHTML=`<h2>Simulated water-only drop</h2>
+    <p class="sub">${d.trials.toLocaleString()} Monte Carlo drops with wind, GPS, latency and altitude error.</p>
+    <div class="sumgrid">
+      <div><b class="num">${d.cep50_m} m</b><span>median miss</span></div>
+      <div><b class="num">${d.within_1m_pct}%</b><span>within 1 m</span></div>
+      <div><b class="num">${d.within_2m_pct}%</b><span>within 2 m</span></div>
+      <div><b class="num">${d.release_lead_m} m</b><span>release lead</span></div>
+    </div>
+    <div class="note"><b>${d.meets_1m_requirement?"Meets":"Does not meet"} the 1 m requirement.</b>
+      Fall time ${d.fall_time_s} s, impact ${d.impact_speed_ms} m/s.</div>
+    <h3>What limits accuracy</h3>
+    ${m.error_budget.filter(r=>r.source!=="all sources").map(r=>`<div class="reason">
+      ${esc(r.source)} → ${r.cep50_m} m <span class="muted">(saves ${r.improvement_m} m)</span>
+      <div class="bar"><i style="width:${Math.max(0,r.improvement_m)/Math.max(...m.error_budget.map(x=>x.improvement_m),.01)*100}%"></i></div></div>`).join("")}
+    <h3>Flight</h3>
+    <div class="reads">
+      <div class="read"><u>Route</u><b class="num">${f.route_km} km</b></div>
+      <div class="read"><u>Flight time</u><b class="num">${f.flight_time_min} min of ${f.usable_endurance_min} usable</b></div>
+      <div class="read"><u>Targets reachable</u><b class="num">${f.reachable_targets} of ${f.targets}</b></div>
+    </div>
+    <a class="btn primary" href="/api/mission-plan" style="margin-top:12px">Download mission.plan</a>`;
+  const ok=m.safety_checks.every(c=>c.pass);
+  $("safety").innerHTML=`<h2>Before you fly</h2>
+    <p class="sub">${ok?"All checks pass.":"Some checks have not passed."}</p>
+    ${m.safety_checks.map(c=>`<div class="check">
+      <span class="${c.pass?"tagok":"tagstop"}">${c.pass?"PASS":"STOP"}</span>
+      <span><b>${esc(c.check)}</b><div class="muted">${esc(c.detail)}</div></span></div>`).join("")}
+    ${ok?"":`<div class="note"><b>Do not fly until every check passes.</b></div>`}
+    <div class="note">${esc(m.note||"")}</div>`;
+}
+
+/* ---------- limits ---------- */
+function renderLimits(){
+  $("limits").innerHTML=`<h2>What this system cannot tell you</h2>
+    <p class="sub">These belong in the report and in any answer to a judge.</p>
+    <ul style="padding-left:18px;color:var(--ink-2);font-size:13.5px">
+      ${(S.status.limits||[]).map(l=>`<li style="margin-bottom:10px">${esc(l)}</li>`).join("")}</ul>`;
+}
+
+/* ---------- boot ---------- */
+(async function(){
+  S.status=await get("/api/status");
+  if(!S.status){$("conn").textContent="server not reachable";return}
+  S.metrics=await get("/api/metrics");
+  S.map=await get("/api/risk-map");
+  S.targets=await get("/api/targets");
+  S.mission=await get("/api/mission");
+  const d=S.status.district;
+  $("place").textContent=d?`${d} district, ${S.status.state||""}`:"no district scored yet";
+  const done=S.status.stages.filter(s=>s.done).length;
+  $("conn").textContent=`${done} of ${S.status.stages.length} stages complete`;
+  renderOverview();topList();draw();renderTargets();renderMission();renderLimits();
+})();
+let rt;addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(draw,120)});
+</script>
+</body>
+</html>

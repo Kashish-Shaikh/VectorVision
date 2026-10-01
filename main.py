@@ -679,6 +679,46 @@ def cmd_mission(args, cfg):
     print("=" * 72)
 
     return 0
+
+def cmd_dashboard(args, cfg):
+    from vectorvision.dashboard.app import serve
+
+    outputs = p(cfg["paths"]["outputs_dir"])
+    models = p(cfg["paths"]["models_dir"])
+
+    print("=" * 72)
+    print("STAGE 10 - dashboard")
+    print("=" * 72)
+
+    have = [(n, (outputs / f).exists()) for n, f in (
+        ("Stage 3 land cover", "metrics/stage3_test_report.json"),
+        ("Stage 5 risk model", "metrics/stage5_risk_report.json"),
+        ("Stage 6 drone detector", "metrics/stage6_drone_test.json"),
+        ("Stage 7 video filter", "metrics/stage7_filter_eval.json"),
+        ("Stage 8 risk map", "fusion/risk_map.json"),
+        ("Stage 8 targets", "fusion/targets.json"),
+        ("Stage 9 mission", "mission/mission_report.json")
+    )]
+
+    for name, ok in have:
+        print(f"  [{'found' if ok else '  -  '}] {name}")
+
+    missing = [n for n, ok in have if not ok]
+
+    if missing:
+        print(
+            f"\n  {len(missing)} result(s) missing; "
+            "the dashboard will show them as not run."
+        )
+
+    print(f"\n  open http://{args.host}:{args.port}")
+    print("  press Ctrl+C to stop")
+    print("=" * 72)
+
+    serve(outputs, models, args.host, args.port)
+
+    return 0
+
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
     sub = ap.add_subparsers(dest="cmd")
@@ -908,6 +948,10 @@ def main():
     # General
     # ------------------------------------------------------------------
     sub.add_parser("stages", help="list stages")
+
+    db = sub.add_parser("dashboard", help="Stage 10")
+    db.add_argument("--host", default="127.0.0.1")
+    db.add_argument("--port", type=int, default=8000)
     args = ap.parse_args()
 
     cfg = load_config()
@@ -940,6 +984,9 @@ def main():
 
     if args.cmd == "mission":
         sys.exit(cmd_mission(args, cfg))
+
+    if args.cmd == "dashboard":
+        sys.exit(cmd_dashboard(args, cfg))
 
     cmd_stages(args, cfg)
 
