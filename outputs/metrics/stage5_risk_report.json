@@ -1,0 +1,250 @@
+{
+  "rows": 1440,
+  "presence": 240,
+  "background": 1200,
+  "features": [
+    "NDVI",
+    "NDWI",
+    "MNDWI",
+    "B2",
+    "B3",
+    "B4",
+    "B8",
+    "B11",
+    "rain_season_mm",
+    "rain_30d_mm",
+    "temp_c",
+    "dew_c",
+    "elev_m",
+    "slope_deg",
+    "hollow_m",
+    "dist_water_m",
+    "water_occurrence",
+    "humidity_pct"
+  ],
+  "spatial_blocks": 294,
+  "block_degrees": 1.0,
+  "spatial_cv": {
+    "roc_auc": 0.8367256944444446,
+    "pr_auc": 0.6150124913782663,
+    "prevalence": 0.16666666666666666,
+    "roc_auc_ci95": [
+      0.8034008246472409,
+      0.8643362269816771
+    ]
+  },
+  "random_cv": {
+    "roc_auc": 0.8871875000000001,
+    "pr_auc": 0.7183711294371996,
+    "prevalence": 0.16666666666666666,
+    "roc_auc_ci95": [
+      0.8602704449989907,
+      0.9097296726496343
+    ]
+  },
+  "leakage_gap": 0.05046180555555557,
+  "label_shuffle_control": {
+    "roc_auc": 0.46964930555555556,
+    "pr_auc": 0.15709886530979572,
+    "prevalence": 0.16666666666666666,
+    "roc_auc_ci95": [
+      0.42712093736002377,
+      0.5107960521776663
+    ]
+  },
+  "coords_only_control": {
+    "roc_auc": 0.7447586805555555,
+    "pr_auc": 0.47282043082779723,
+    "prevalence": 0.16666666666666666,
+    "roc_auc_ci95": [
+      0.7091271769174646,
+      0.7809937311043933
+    ]
+  },
+  "operating_point": {
+    "threshold": 0.3,
+    "tp": 151,
+    "fp": 152,
+    "tn": 1048,
+    "fn": 89,
+    "precision": 0.49834983498349833,
+    "recall": 0.6291666666666667,
+    "f1": 0.5561694290976059,
+    "specificity": 0.8733333333333333
+  },
+  "permutation_importance": [
+    {
+      "feature": "rain_30d_mm",
+      "mean_auc_drop": 0.00769687500000007,
+      "std": 0.0006636125245613101
+    },
+    {
+      "feature": "MNDWI",
+      "mean_auc_drop": 0.007643055555555589,
+      "std": 0.000807259631980868
+    },
+    {
+      "feature": "humidity_pct",
+      "mean_auc_drop": 0.004592361111111176,
+      "std": 0.00042982464842661154
+    },
+    {
+      "feature": "elev_m",
+      "mean_auc_drop": 0.004577777777777825,
+      "std": 0.0006254246242738856
+    },
+    {
+      "feature": "dist_water_m",
+      "mean_auc_drop": 0.004085069444444522,
+      "std": 0.0004974720285346579
+    },
+    {
+      "feature": "dew_c",
+      "mean_auc_drop": 0.0022746527777778524,
+      "std": 0.00010399812754279424
+    },
+    {
+      "feature": "rain_season_mm",
+      "mean_auc_drop": 0.002019444444444518,
+      "std": 0.00017155870166589185
+    },
+    {
+      "feature": "temp_c",
+      "mean_auc_drop": 0.0019229166666667296,
+      "std": 0.00021891418001098156
+    },
+    {
+      "feature": "B11",
+      "mean_auc_drop": 0.0011413194444445218,
+      "std": 0.0002779211869392142
+    },
+    {
+      "feature": "B2",
+      "mean_auc_drop": 0.0010569444444445298,
+      "std": 0.0004290582162505365
+    },
+    {
+      "feature": "slope_deg",
+      "mean_auc_drop": 0.0009065972222223051,
+      "std": 9.523578297868711e-05
+    },
+    {
+      "feature": "hollow_m",
+      "mean_auc_drop": 0.0008298611111111631,
+      "std": 6.014065304058772e-05
+    },
+    {
+      "feature": "B8",
+      "mean_auc_drop": 0.000717361111111181,
+      "std": 0.0001343548111448875
+    },
+    {
+      "feature": "NDVI",
+      "mean_auc_drop": 0.0003784722222223036,
+      "std": 8.91218734842019e-05
+    },
+    {
+      "feature": "NDWI",
+      "mean_auc_drop": 0.00013819444444452823,
+      "std": 0.00022459024760879595
+    },
+    {
+      "feature": "B4",
+      "mean_auc_drop": 0.00013784722222230926,
+      "std": 0.00011509827473609062
+    },
+    {
+      "feature": "B3",
+      "mean_auc_drop": 4.3055555555626676e-05,
+      "std": 0.00020535016953885198
+    },
+    {
+      "feature": "water_occurrence",
+      "mean_auc_drop": 7.291666666708884e-06,
+      "std": 1.891962878586718e-05
+    }
+  ],
+  "shap": {
+    "available": true,
+    "sampled_rows": 400,
+    "mean_abs": [
+      {
+        "feature": "MNDWI",
+        "value": 0.07510430397274416
+      },
+      {
+        "feature": "rain_30d_mm",
+        "value": 0.05441308775043042
+      },
+      {
+        "feature": "B2",
+        "value": 0.05373043505295474
+      },
+      {
+        "feature": "humidity_pct",
+        "value": 0.03845178525895196
+      },
+      {
+        "feature": "dist_water_m",
+        "value": 0.031171296968124707
+      },
+      {
+        "feature": "NDWI",
+        "value": 0.02947973570828417
+      },
+      {
+        "feature": "dew_c",
+        "value": 0.029352952138538512
+      },
+      {
+        "feature": "elev_m",
+        "value": 0.02595324258845312
+      },
+      {
+        "feature": "B3",
+        "value": 0.024057125033839593
+      },
+      {
+        "feature": "rain_season_mm",
+        "value": 0.022018792265668715
+      },
+      {
+        "feature": "temp_c",
+        "value": 0.018504922902228552
+      },
+      {
+        "feature": "B11",
+        "value": 0.018433586162785783
+      },
+      {
+        "feature": "B4",
+        "value": 0.01588743507540542
+      },
+      {
+        "feature": "B8",
+        "value": 0.013760259813545233
+      },
+      {
+        "feature": "NDVI",
+        "value": 0.013739887435440324
+      },
+      {
+        "feature": "hollow_m",
+        "value": 0.010215237510424064
+      },
+      {
+        "feature": "slope_deg",
+        "value": 0.009607562719096262
+      },
+      {
+        "feature": "water_occurrence",
+        "value": 0.0004152038975567755
+      }
+    ]
+  },
+  "interpretation": {
+    "what_it_predicts": "Similarity of local conditions to places where Anopheles vectors were recorded, versus the country as a whole.",
+    "what_it_does_not_predict": "Whether a given cell contains larvae now, or malaria cases.",
+    "labels": "1 = real field record. 0 = background point, not a confirmed absence."
+  }
+}

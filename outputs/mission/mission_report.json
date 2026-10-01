@@ -1,0 +1,231 @@
+{
+  "home": [
+    21.45,
+    80.19
+  ],
+  "targets_in_plan": 5,
+  "drop_simulation": {
+    "release_lead_m": 3.43,
+    "fall_time_s": 1.781,
+    "impact_speed_ms": 16.28,
+    "trials": 2000,
+    "mean_error_m": 1.33,
+    "median_error_m": 1.25,
+    "cep50_m": 1.25,
+    "cep90_m": 2.3,
+    "within_1m_pct": 35.6,
+    "within_2m_pct": 82.5,
+    "meets_1m_requirement": false
+  },
+  "condition_sweep": [
+    {
+      "height_m": 10,
+      "speed_ms": 0,
+      "lead_m": 0.0,
+      "cep50_m": 1.26,
+      "within_1m_pct": 34.5
+    },
+    {
+      "height_m": 10,
+      "speed_ms": 2,
+      "lead_m": 2.82,
+      "cep50_m": 1.25,
+      "within_1m_pct": 33.5
+    },
+    {
+      "height_m": 10,
+      "speed_ms": 4,
+      "lead_m": 5.61,
+      "cep50_m": 1.32,
+      "within_1m_pct": 32.5
+    },
+    {
+      "height_m": 10,
+      "speed_ms": 6,
+      "lead_m": 8.36,
+      "cep50_m": 1.43,
+      "within_1m_pct": 27.0
+    },
+    {
+      "height_m": 15,
+      "speed_ms": 0,
+      "lead_m": 0.0,
+      "cep50_m": 1.26,
+      "within_1m_pct": 34.8
+    },
+    {
+      "height_m": 15,
+      "speed_ms": 2,
+      "lead_m": 3.43,
+      "cep50_m": 1.25,
+      "within_1m_pct": 33.5
+    },
+    {
+      "height_m": 15,
+      "speed_ms": 4,
+      "lead_m": 6.82,
+      "cep50_m": 1.33,
+      "within_1m_pct": 31.2
+    },
+    {
+      "height_m": 15,
+      "speed_ms": 6,
+      "lead_m": 10.16,
+      "cep50_m": 1.43,
+      "within_1m_pct": 26.2
+    },
+    {
+      "height_m": 20,
+      "speed_ms": 0,
+      "lead_m": 0.0,
+      "cep50_m": 1.28,
+      "within_1m_pct": 34.0
+    },
+    {
+      "height_m": 20,
+      "speed_ms": 2,
+      "lead_m": 3.93,
+      "cep50_m": 1.27,
+      "within_1m_pct": 33.0
+    },
+    {
+      "height_m": 20,
+      "speed_ms": 4,
+      "lead_m": 7.82,
+      "cep50_m": 1.34,
+      "within_1m_pct": 31.5
+    },
+    {
+      "height_m": 20,
+      "speed_ms": 6,
+      "lead_m": 11.65,
+      "cep50_m": 1.44,
+      "within_1m_pct": 26.2
+    },
+    {
+      "height_m": 25,
+      "speed_ms": 0,
+      "lead_m": 0.0,
+      "cep50_m": 1.29,
+      "within_1m_pct": 34.5
+    },
+    {
+      "height_m": 25,
+      "speed_ms": 2,
+      "lead_m": 4.37,
+      "cep50_m": 1.28,
+      "within_1m_pct": 33.2
+    },
+    {
+      "height_m": 25,
+      "speed_ms": 4,
+      "lead_m": 8.69,
+      "cep50_m": 1.35,
+      "within_1m_pct": 30.2
+    },
+    {
+      "height_m": 25,
+      "speed_ms": 6,
+      "lead_m": 12.94,
+      "cep50_m": 1.44,
+      "within_1m_pct": 26.8
+    },
+    {
+      "height_m": 30,
+      "speed_ms": 0,
+      "lead_m": 0.0,
+      "cep50_m": 1.3,
+      "within_1m_pct": 34.5
+    },
+    {
+      "height_m": 30,
+      "speed_ms": 2,
+      "lead_m": 4.76,
+      "cep50_m": 1.3,
+      "within_1m_pct": 32.0
+    },
+    {
+      "height_m": 30,
+      "speed_ms": 4,
+      "lead_m": 9.46,
+      "cep50_m": 1.36,
+      "within_1m_pct": 30.8
+    },
+    {
+      "height_m": 30,
+      "speed_ms": 6,
+      "lead_m": 14.08,
+      "cep50_m": 1.44,
+      "within_1m_pct": 26.0
+    }
+  ],
+  "error_budget": [
+    {
+      "source": "perfect GPS",
+      "cep50_m": 0.37,
+      "improvement_m": 0.88
+    },
+    {
+      "source": "exact speed",
+      "cep50_m": 1.22,
+      "improvement_m": 0.03
+    },
+    {
+      "source": "all sources",
+      "cep50_m": 1.25,
+      "improvement_m": 0.0
+    },
+    {
+      "source": "no wind",
+      "cep50_m": 1.26,
+      "improvement_m": -0.01
+    },
+    {
+      "source": "no latency jitter",
+      "cep50_m": 1.26,
+      "improvement_m": -0.01
+    },
+    {
+      "source": "exact altitude",
+      "cep50_m": 1.26,
+      "improvement_m": -0.01
+    }
+  ],
+  "feasibility": {
+    "targets": 5,
+    "route_km": 0.218,
+    "flight_time_min": 2.7,
+    "usable_endurance_min": 9.0,
+    "reachable_targets": 5,
+    "fits_one_battery": true,
+    "note": "All targets fit one battery with reserve."
+  },
+  "safety_checks": [
+    {
+      "check": "within visual line of sight",
+      "pass": true,
+      "detail": "all targets within 1.0 km"
+    },
+    {
+      "check": "targets are puddles, not permanent water",
+      "pass": false,
+      "detail": "1 target(s) look like permanent water; confirm on foot first"
+    },
+    {
+      "check": "positions come from telemetry",
+      "pass": false,
+      "detail": "5 target(s) are approximate frame offsets; connect the telemetry radio"
+    },
+    {
+      "check": "payload is water only",
+      "pass": true,
+      "detail": "payload set to 'water'"
+    },
+    {
+      "check": "drone registered and permissions held",
+      "pass": false,
+      "detail": "DGCA Micro category: registration required, and a payload drop needs specific permission. Set registered: true in config once both are in place."
+    }
+  ],
+  "note": "Simulated water-only drop. No autonomous flight is commanded; the plan is a route for a manual pilot."
+}

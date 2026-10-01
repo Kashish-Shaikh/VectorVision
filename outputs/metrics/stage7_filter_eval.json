@@ -1,0 +1,43 @@
+{
+  "images": 20,
+  "frames_per_image": 12,
+  "total_frames": 240,
+  "prevalence": 0.4625,
+  "per_frame_raw": {
+    "tp": 91,
+    "fp": 25,
+    "tn": 104,
+    "fn": 20,
+    "precision": 0.7844827586206896,
+    "recall": 0.8198198198198198,
+    "specificity": 0.8062015503875969,
+    "f1": 0.801762114537445,
+    "accuracy": 0.8125,
+    "balanced_accuracy": 0.8130106851037083
+  },
+  "after_persistence_filter": {
+    "tp": 90,
+    "fp": 21,
+    "tn": 108,
+    "fn": 21,
+    "precision": 0.8108108108108109,
+    "recall": 0.8108108108108109,
+    "specificity": 0.8372093023255814,
+    "f1": 0.8108108108108109,
+    "accuracy": 0.825,
+    "balanced_accuracy": 0.8240100565681961
+  },
+  "change": {
+    "precision": 0.0263,
+    "recall": -0.009,
+    "specificity": 0.031,
+    "f1": 0.009,
+    "balanced_accuracy": 0.011
+  },
+  "settings": {
+    "prob_threshold": 0.7,
+    "min_pool_px": 262,
+    "persist_window": 5,
+    "persist_votes": 3
+  }
+}
