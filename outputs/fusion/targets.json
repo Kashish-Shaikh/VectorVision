@@ -1,159 +1,17 @@
 {
   "district": "Gondiya",
-  "detections_before_merge": 56,
-  "targets_found": 5,
+  "detections_before_merge": 0,
+  "targets_found": 0,
   "bands": {
     "critical": 0,
     "high": 0,
     "moderate": 0,
-    "low": 5
+    "low": 0
   },
-  "notes": [
-    "Every target shares one suitability value, so the flight stayed inside a single scored cell. Fly a wider pass, or use telemetry, to let the satellite layer separate them.",
-    "Suitability is low everywhere in this flight: the drone found water in terrain the satellite model rates as poor habitat. That is the index working, not a bug, but it is worth flying one of the top-ranked zones.",
-    "1 target(s) are larger than 500 m2 and are probably permanent water, not breeding puddles. Anopheles prefer small sunlit pools, so check these before treating them as priority sites.",
-    "Positions are approximate: no telemetry, so they were placed by frame offset from the survey centre assuming a north-facing camera."
-  ],
-  "route_km": 0.136,
+  "notes": [],
+  "route_km": 0.0,
   "reference_pool_m2": 50.0,
-  "targets": [
-    {
-      "lat": 21.45,
-      "lon": 80.19,
-      "location_source": "survey cell + frame offset (approximate)",
-      "area_m2": 3164.19,
-      "confidence": 0.953,
-      "frames_seen": 52,
-      "t_start_s": 3.68,
-      "t_end_s": 4.68,
-      "matched_cell_km": 0.147,
-      "priority_index": 0.0334,
-      "band": "low",
-      "factors": {
-        "habitat_suitability": 0.035,
-        "drone_confirmation": 0.953,
-        "larval_capacity": 1.0
-      },
-      "reasons": [
-        "rainfall in the last 30 days here is 5.146 mm, which lowers the score",
-        "B11 here is 0.25, which lowers the score",
-        "seasonal rainfall here is 1315.814 mm, which raises the score",
-        "drone saw 3164.19 m2 of standing water across 52 frames (43 detections merged)",
-        "large water body: likely permanent, check before treating as a breeding puddle"
-      ],
-      "merged_detections": 43,
-      "likely_permanent_water": true,
-      "visit_order": 1
-    },
-    {
-      "lat": 21.450133,
-      "lon": 80.189777,
-      "location_source": "survey cell + frame offset (approximate)",
-      "area_m2": 112.66,
-      "confidence": 0.915,
-      "frames_seen": 30,
-      "t_start_s": 0.0,
-      "t_end_s": 0.33,
-      "matched_cell_km": 0.127,
-      "priority_index": 0.032,
-      "band": "low",
-      "factors": {
-        "habitat_suitability": 0.035,
-        "drone_confirmation": 0.915,
-        "larval_capacity": 1.0
-      },
-      "reasons": [
-        "rainfall in the last 30 days here is 5.146 mm, which lowers the score",
-        "B11 here is 0.25, which lowers the score",
-        "seasonal rainfall here is 1315.814 mm, which raises the score",
-        "drone saw 112.66 m2 of standing water across 30 frames (6 detections merged)"
-      ],
-      "merged_detections": 6,
-      "likely_permanent_water": false,
-      "visit_order": 3
-    },
-    {
-      "lat": 21.449848,
-      "lon": 80.190231,
-      "location_source": "survey cell + frame offset (approximate)",
-      "area_m2": 29.36,
-      "confidence": 0.844,
-      "frames_seen": 6,
-      "t_start_s": 4.85,
-      "t_end_s": 5.35,
-      "matched_cell_km": 0.165,
-      "priority_index": 0.0164,
-      "band": "low",
-      "factors": {
-        "habitat_suitability": 0.044,
-        "drone_confirmation": 0.633,
-        "larval_capacity": 0.587
-      },
-      "reasons": [
-        "B11 here is 0.235, which lowers the score",
-        "rainfall in the last 30 days here is 5.146 mm, which lowers the score",
-        "local dip where water collects here is -2.296 m, which raises the score",
-        "drone saw 29.36 m2 of standing water across 6 frames (3 detections merged)"
-      ],
-      "merged_detections": 3,
-      "likely_permanent_water": false,
-      "visit_order": 5
-    },
-    {
-      "lat": 21.449896,
-      "lon": 80.189772,
-      "location_source": "survey cell + frame offset (approximate)",
-      "area_m2": 22.37,
-      "confidence": 0.835,
-      "frames_seen": 39,
-      "t_start_s": 8.53,
-      "t_end_s": 11.2,
-      "matched_cell_km": 0.153,
-      "priority_index": 0.0131,
-      "band": "low",
-      "factors": {
-        "habitat_suitability": 0.035,
-        "drone_confirmation": 0.835,
-        "larval_capacity": 0.447
-      },
-      "reasons": [
-        "rainfall in the last 30 days here is 5.146 mm, which lowers the score",
-        "B11 here is 0.25, which lowers the score",
-        "seasonal rainfall here is 1315.814 mm, which raises the score",
-        "drone saw 22.37 m2 of standing water across 39 frames (2 detections merged)"
-      ],
-      "merged_detections": 2,
-      "likely_permanent_water": false,
-      "visit_order": 2
-    },
-    {
-      "lat": 21.450178,
-      "lon": 80.190219,
-      "location_source": "survey cell + frame offset (approximate)",
-      "area_m2": 13.83,
-      "confidence": 0.827,
-      "frames_seen": 9,
-      "t_start_s": 6.02,
-      "t_end_s": 7.02,
-      "matched_cell_km": 0.131,
-      "priority_index": 0.0088,
-      "band": "low",
-      "factors": {
-        "habitat_suitability": 0.044,
-        "drone_confirmation": 0.724,
-        "larval_capacity": 0.277
-      },
-      "reasons": [
-        "B11 here is 0.235, which lowers the score",
-        "rainfall in the last 30 days here is 5.146 mm, which lowers the score",
-        "local dip where water collects here is -2.296 m, which raises the score",
-        "drone saw 13.83 m2 of standing water across 9 frames (2 detections merged)"
-      ],
-      "merged_detections": 2,
-      "likely_permanent_water": false,
-      "visit_order": 4
-    }
-  ],
+  "targets": [],
   "index_definition": "PBI = habitat suitability x drone confirmation x larval capacity. A product, because all three must hold; no fitted weights.",
   "caveat": "A ranking for prioritising visits, not a probability that larvae are present."
 }
