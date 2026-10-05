@@ -598,13 +598,21 @@ def cmd_fuse(args, cfg):
     rm_path = fuse_dir / "risk_map.json"
 
     if args.rebuild_map or not rm_path.exists():
-        risk_map = build_risk_map(cfg, model, fuse_dir)
+        from vectorvision.utils.config import get_device
+
+        risk_map = build_risk_map(
+           cfg,
+           model,
+           fuse_dir,
+           p(cfg["paths"]["models_dir"]) / "unet_lulc",
+           get_device(cfg["project"].get("device", "auto"))
+    )
     else:
-        risk_map = json.loads(rm_path.read_text())
-        print(
-            f"using existing risk map: {len(risk_map['cells']):,} cells "
-            f"(--rebuild-map to redo)"
-        )
+       risk_map = json.loads(rm_path.read_text())
+    print(
+        f"using existing risk map: {len(risk_map['cells']):,} cells "
+        f"(--rebuild-map to redo)"
+    )
 
     print("\nWHERE TO FLY (satellite side only)")
     print(f"  {'rank':>4}{'lat':>11}{'lon':>11}{'score':>8}  reasons")
