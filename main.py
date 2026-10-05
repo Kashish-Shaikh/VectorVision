@@ -40,6 +40,42 @@ def cmd_stages(_args, _cfg):
     for n, name, desc, status in STAGES:
         print(f"  {n:>2}. {name:<15} {desc:<52} [{status}]")
 
+def cmd_add_landcover(args, cfg):
+    from vectorvision.risk.landcover import add_to_table
+    from vectorvision.utils.config import get_device
+
+    print("=" * 72)
+    print("STAGE 4b - land-cover features from the satellite U-Net")
+    print("=" * 72)
+
+    table = p(cfg["paths"]["vectors_dir"]) / "risk_training_table.csv"
+    unet = p(cfg["paths"]["models_dir"]) / "unet_lulc"
+
+    if not table.exists():
+        print("No training table. Run:  python main.py build-features")
+        return 1
+
+    if not (unet / "best.pt").exists():
+        print("No land-cover model. Run:  python main.py train-lulc")
+        return 1
+
+    dev = get_device(cfg["project"].get("device", "auto"))
+
+    add_to_table(
+        cfg,
+        table,
+        unet,
+        p(cfg["paths"]["outputs_dir"]),
+        dev
+    )
+
+    print("\n" + "=" * 72)
+    print("STAGE 4b DONE - now retrain the risk model to use them:")
+    print("  python main.py train-risk")
+    print("  python main.py fuse --rebuild-map")
+    print("=" * 72)
+
+    return 0
 
 def cmd_verify(args, cfg):
     from vectorvision.utils.environment import check_environment
@@ -813,6 +849,8 @@ def main():
         help="re-download and re-sample",
     )
 
+    sub.add_parser("add-landcover", help="Stage 4b")
+
     # ------------------------------------------------------------------
     # Stage 5
     # ------------------------------------------------------------------
@@ -970,6 +1008,9 @@ def main():
     if args.cmd == "build-features":
         sys.exit(cmd_build_features(args, cfg))
 
+    if args.cmd == "add-landcover":
+        sys.exit(cmd_add_landcover(args, cfg))
+    
     if args.cmd == "train-risk":
         sys.exit(cmd_train_risk(args, cfg))
 

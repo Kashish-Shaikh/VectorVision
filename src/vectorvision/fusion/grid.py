@@ -81,14 +81,16 @@ def phrase(reason: dict) -> str:
     return phrase_reason(reason)
 
 
-def build_risk_map(cfg: dict, model_path: Path, out_dir: Path) -> dict:
+def build_risk_map(cfg: dict, model_path: Path, out_dir: Path,
+                   lulc_model: Path | None = None, dev: str = "cpu") -> dict:
     import joblib
 
     f = cfg["fusion"]
     s = cfg["study_area"]
     bundle = joblib.load(model_path)
-    if list(bundle["features"]) != FEATURES + ["humidity_pct"]:
-        print("WARNING: the model's feature list differs from the current feature stack.")
+    want = list(bundle["features"])
+    needs_lulc = any(w.startswith("lulc_") for w in want)
+    print(f"model expects {len(want)} features" + (" (including land cover)" if needs_lulc else ""))
 
     ee = init_ee(cfg)
     geom, name = district_geometry(ee, s["state"], s["district"])
@@ -98,13 +100,39 @@ def build_risk_map(cfg: dict, model_path: Path, out_dir: Path) -> dict:
     print(f"  Sentinel-2 scenes in the season window: {n_scenes:,}")
 
     def score_points(pts, label):
+        """Build exactly the feature matrix the trained model was given, in its order.
+
+        Assembling by name rather than by position means a model trained with land
+        cover cannot be fed a matrix without it, which would otherwise fail silently
+        and produce confident nonsense.
+        """
         print(f"sampling {len(pts):,} {label} points...")
         X, _, kept = sample_points(ee, stack, pts, np.zeros(len(pts), int), scale=int(s["grid_m"]))
         if len(X) == 0:
             raise SystemExit(f"No {label} points returned data. Check the season window.")
-        hum = relative_humidity(X[:, FEATURES.index("temp_c")], X[:, FEATURES.index("dew_c")])
-        Xf = np.column_stack([X, hum])
-        return Xf, pts[kept]
+        cols = {name: X[:, i] for i, name in enumerate(FEATURES)}
+        cols["humidity_pct"] = relative_humidity(cols["temp_c"], cols["dew_c"])
+        coords = pts[kept]
+
+        if needs_lulc:
+            from ..risk.landcover import fractions_for_points
+            print(f"  land-cover chips for {len(coords):,} {label} points...")
+            fr, lk, names = fractions_for_points(cfg, ee, stack, coords, lulc_model, dev,
+                                                 0, 0)
+            if fr is None:
+                raise SystemExit("Land-cover chips failed, but the model needs them.")
+            keep = np.zeros(len(coords), bool); keep[lk] = True
+            for k, n in enumerate(names):
+                v = np.full(len(coords), np.nan)
+                v[lk] = fr[:, k]
+                cols[n] = v
+            cols = {k: v[keep] for k, v in cols.items()}
+            coords = coords[keep]
+
+        missing = [w for w in want if w not in cols]
+        if missing:
+            raise SystemExit(f"The model needs features this stage cannot build: {missing}")
+        return np.column_stack([cols[w] for w in want]), coords
 
     # ---- Tier 1: coarse pass over the whole district
     coarse_pts = _grid_points(ee, geom, f["coarse_spacing_m"], f["max_coarse_points"])
@@ -134,7 +162,7 @@ def build_risk_map(cfg: dict, model_path: Path, out_dir: Path) -> dict:
     q = np.quantile(sf, [0.5, 0.75, 0.9])
     band = lambda v: ("critical" if v >= q[2] else "high" if v >= q[1]
                       else "moderate" if v >= q[0] else "low")
-    fi = {k: i for i, k in enumerate(bundle["features"])}
+    fi = {k: i for i, k in enumerate(want)}
     cells = []
     for i in range(len(Xf)):
         row = Xf[i]
