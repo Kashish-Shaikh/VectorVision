@@ -970,6 +970,13 @@ def main():
         help="path to an MP4 from the drone",
     )
 
+    iv.add_argument("--mavlink", default=None,
+                help="telemetry port, e.g. COM5, /dev/ttyUSB0 or udp:127.0.0.1:14550")
+    iv.add_argument("--baud", type=int, default=57600)
+    iv.add_argument("--telemetry-log", default=None,
+                help="JSON log of fixes, to geotag a flight recorded earlier")
+
+
     iv.add_argument(
         "--simulate",
         action="store_true",

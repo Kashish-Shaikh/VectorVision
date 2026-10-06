@@ -65,7 +65,7 @@ class PoolTracker:
         self.r2 = match_radius ** 2
         self.max_gap = max_gap
 
-    def update(self, frame_idx: int, detections: list[dict]) -> None:
+    def update(self, frame_idx: int, detections: list[dict], fix: dict | None = None) -> None:
         for d in detections:
             hit = None
             for t in self.tracks:
@@ -77,7 +77,9 @@ class PoolTracker:
             if hit is None:
                 self.tracks.append({"cx": d["cx"], "cy": d["cy"], "first_frame": frame_idx,
                                     "last_frame": frame_idx, "n_frames": 1,
-                                    "areas_px": [d["area_px"]], "confs": [d["conf"]]})
+                                    "areas_px": [d["area_px"]], "confs": [d["conf"]],
+                                    "gsds": [d.get("gsd_m")], "fix": fix, "best_conf": d["conf"],
+                                    "best_cx": d["cx"], "best_cy": d["cy"]})
             else:
                 hit["last_frame"] = frame_idx
                 hit["n_frames"] += 1
@@ -85,6 +87,12 @@ class PoolTracker:
                 hit["cy"] = 0.7 * hit["cy"] + 0.3 * d["cy"]
                 hit["areas_px"].append(d["area_px"])
                 hit["confs"].append(d["conf"])
+                hit.setdefault("gsds", []).append(d.get("gsd_m"))
+                # Keep the fix from the clearest sighting: that frame saw the pool
+                # best, so its position and heading give the most reliable projection.
+                if fix and d["conf"] >= hit.get("best_conf", 0):
+                    hit["fix"], hit["best_conf"] = fix, d["conf"]
+                    hit["best_cx"], hit["best_cy"] = d["cx"], d["cy"]
 
     def confirmed(self, min_frames: int, gsd_m: float, fps: float = 30.0) -> list[dict]:
         out = []
@@ -92,14 +100,25 @@ class PoolTracker:
             if t["n_frames"] < min_frames:
                 continue
             area_px = float(np.median(t["areas_px"]))
-            out.append({"frames_seen": t["n_frames"],
+            # Use the ground scale recorded while this pool was in view. Height
+            # changes during a flight, so one fixed scale would mis-size every pool
+            # seen at a different altitude.
+            seen_gsd = [g for g in t.get("gsds", []) if g]
+            scale = float(np.median(seen_gsd)) if seen_gsd else gsd_m
+            rec = {"frames_seen": t["n_frames"],
                         "first_frame": t["first_frame"], "last_frame": t["last_frame"],
                         "t_start_s": round(t["first_frame"] / max(fps, 1e-6), 2),
                         "t_end_s": round(t["last_frame"] / max(fps, 1e-6), 2),
                         "area_px": area_px,
-                        "area_m2": round(pixels_to_m2(area_px, gsd_m), 2),
+                   "area_m2": round(pixels_to_m2(area_px, scale), 2),
+                   "gsd_m_used": round(scale, 4),
                         "confidence": round(float(np.mean(t["confs"])), 3),
-                        "frame_x": round(t["cx"], 3), "frame_y": round(t["cy"], 3)})
+                   "frame_x": round(t["cx"], 3), "frame_y": round(t["cy"], 3)}
+            if t.get("fix"):
+                rec["gps"] = t["fix"]
+                rec["frame_x_at_fix"] = round(t.get("best_cx", t["cx"]), 3)
+                rec["frame_y_at_fix"] = round(t.get("best_cy", t["cy"]), 3)
+            out.append(rec)
         return sorted(out, key=lambda d: -d["area_m2"])
 
     @property
@@ -131,11 +150,15 @@ def severity(area_m2: float, confidence: float, frames_seen: int,
 
 
 # --------------------------------------------------------------------- pipeline
-def detect_sequence(frames, predict_fn, cfg_v: dict, gsd_m: float, fps: float = 30.0) -> dict:
+def detect_sequence(frames, predict_fn, cfg_v: dict, gsd_m: float, fps: float = 30.0,
+                    fixes: dict | None = None) -> dict:
     """Run the detector over a sequence of frames and group what it finds.
 
     `frames`    iterable of (frame_index, RGB uint8 array)
     `predict_fn` takes a batch of frames, returns water probability maps
+    `fixes`     optional {frame_index: telemetry dict}. When present, each pool's
+                area is measured using the height at that instant rather than one
+                assumed altitude, and it carries the fix needed for real coordinates.
     """
     import cv2
 
@@ -144,7 +167,15 @@ def detect_sequence(frames, predict_fn, cfg_v: dict, gsd_m: float, fps: float = 
     tracker = PoolTracker(float(cfg_v["match_radius"]), int(cfg_v.get("max_gap", 5)))
     raw_flags, per_frame = [], []
 
+    fixes = fixes or {}
     for idx, img in frames:
+        fix = fixes.get(idx)
+        # Height changes during a flight, and ground scale goes with it: the same
+        # puddle covers four times the pixels at half the altitude.
+        gsd_here = gsd_m
+        if fix and fix.get("alt_m") and fix["alt_m"] >= 2.0:
+            gsd_here = ground_sample_distance(fix["alt_m"], float(cfg_v["hfov_deg"]),
+                                              img.shape[1])
         prob = predict_fn(img[None])[0]
         h, w = prob.shape
         binm = (prob >= thr).astype(np.uint8)
@@ -158,11 +189,14 @@ def detect_sequence(frames, predict_fn, cfg_v: dict, gsd_m: float, fps: float = 
             comp = lab == k
             dets.append({"cx": float(cent[k][0] / w), "cy": float(cent[k][1] / h),
                          "area_px": area, "conf": float(prob[comp].mean())})
-        tracker.update(idx, dets)
+        for d in dets:
+            d["gsd_m"] = gsd_here
+        tracker.update(idx, dets, fix=fix)
         raw_flags.append(len(dets) > 0)
         per_frame.append({"frame": int(idx), "t_s": round(idx / max(fps, 1e-6), 2),
                           "raw_water": bool(dets), "pools": len(dets),
-                          "max_conf": round(max((d["conf"] for d in dets), default=0.0), 3)})
+                          "max_conf": round(max((d["conf"] for d in dets), default=0.0), 3),
+                          "gps": bool(fix), "alt_m": (fix or {}).get("alt_m")})
 
     smooth = persistence_vote(np.array(raw_flags, bool),
                               int(cfg_v["persist_window"]), int(cfg_v["persist_votes"]))
@@ -173,7 +207,9 @@ def detect_sequence(frames, predict_fn, cfg_v: dict, gsd_m: float, fps: float = 
     for p in pools:
         p.update(severity(p["area_m2"], p["confidence"], p["frames_seen"]))
 
+    n_fix = sum(1 for f in per_frame if f["gps"])
     return {"frames_analysed": len(per_frame),
+            "frames_with_gps": n_fix,
             "frames_raw_water": int(np.sum(raw_flags)),
             "frames_after_filter": int(smooth.sum()),
             "raw_tracks": tracker.n_raw, "confirmed_pools": len(pools),

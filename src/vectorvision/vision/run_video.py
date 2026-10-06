@@ -63,19 +63,94 @@ def read_video(path: Path, every_n: int, max_frames: int, size: int):
     return frames, fps, width
 
 
-def run_video(cfg: dict, video: Path, model_dir: Path, outputs: Path, dev: str) -> dict:
+def read_video_live(source, every_n: int, max_frames: int, size: int, telem=None):
+    """Read frames and, when a radio is connected, the GPS fix at that instant.
+
+    The fix must be taken while the frame is being captured. Reading telemetry
+    afterwards would place the pool where the drone had moved on to, which at 5 m/s
+    is several metres of error for every second of delay.
+    """
+    import cv2
+    cap = cv2.VideoCapture(int(source) if str(source).isdigit() else str(source))
+    if not cap.isOpened():
+        raise SystemExit(f"Could not open {source}.")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    frames, fixes, idx, kept, no_fix = [], {}, 0, 0, 0
+    while kept < max_frames:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        if idx % every_n == 0:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append((idx, cv2.resize(rgb, (size, size), interpolation=cv2.INTER_AREA)))
+            if telem is not None:
+                st = telem.read_once(timeout=0.25, want_projection=True)
+                if st is not None and st.usable_for_projection:
+                    fixes[idx] = st.as_dict()
+                else:
+                    no_fix += 1
+            kept += 1
+            if kept % 25 == 0:
+                print(f"  captured {kept} frames" +
+                      (f", {len(fixes)} with GPS" if telem is not None else ""), end="\r")
+        idx += 1
+    cap.release()
+    if telem is not None:
+        print(f"\n  {len(fixes)} of {kept} frames have a GPS fix" +
+              (f" ({no_fix} without)" if no_fix else ""))
+    return frames, fps, fixes
+
+
+def run_video(cfg: dict, video: Path, model_dir: Path, outputs: Path, dev: str,
+              mavlink: str | None = None, baud: int = 57600,
+              telemetry_log: Path | None = None) -> dict:
     v = cfg["video"]
     predict_fn, size, _ = load_detector(model_dir, dev)
-    frames, fps, width = read_video(video, int(v["every_n"]), int(v["max_frames"]), size)
+
+    telem = None
+    if mavlink:
+        from ..drone.telemetry import PixhawkTelemetry
+        telem = PixhawkTelemetry(mavlink, baud)
+        try:
+            telem.connect()
+        except Exception as e:
+            print(f"telemetry unavailable: {e}")
+            print("continuing without it; pools will have no coordinates.")
+            telem = None
+
+    if telem is not None or str(video).isdigit():
+        frames, fps, fixes = read_video_live(video, int(v["every_n"]), int(v["max_frames"]),
+                                             size, telem)
+    else:
+        frames, fps, _w = read_video(video, int(v["every_n"]), int(v["max_frames"]), size)
+        fixes = {}
+
+    # A flight recorded earlier can still get real coordinates from a saved log.
+    if not fixes and telemetry_log and Path(telemetry_log).exists():
+        from ..drone.telemetry import TelemetryLog
+        log = TelemetryLog.load(telemetry_log)
+        t0 = log.fixes[0]["timestamp"] if log.fixes else 0
+        for idx, _img in frames:
+            f = log.at(t0 + idx / max(fps, 1e-6))
+            if f:
+                fixes[idx] = f
+        print(f"  matched {len(fixes)} of {len(frames)} frames to the telemetry log")
+
     if not frames:
         raise SystemExit("No frames were read from the video.")
     gsd = ground_sample_distance(float(v["altitude_m"]), float(v["hfov_deg"]), size)
     print(f"{len(frames)} frames sampled (every {v['every_n']}th of {fps:.0f} fps), "
-          f"ground scale {gsd*100:.0f} cm per pixel at {v['altitude_m']} m")
+          f"ground scale {gsd*100:.0f} cm per pixel at {v['altitude_m']} m"
+          + (" (overridden per frame by telemetry)" if fixes else ""))
 
-    res = detect_sequence(frames, predict_fn, v, gsd, fps)
+    res = detect_sequence(frames, predict_fn, v, gsd, fps, fixes=fixes)
     res["video"] = str(video)
     res["altitude_m"] = float(v["altitude_m"])
+    res["telemetry"] = {"connected": telem is not None,
+                        "frames_with_gps": len(fixes),
+                        "source": mavlink or (str(telemetry_log) if fixes else None)}
+    if telem is not None:
+        telem.close()
     (outputs / "metrics").mkdir(parents=True, exist_ok=True)
     (outputs / "metrics" / "stage7_video.json").write_text(json.dumps(res, indent=2))
     _overlay(frames, predict_fn, res, float(v["prob_threshold"]), outputs / "graphs")

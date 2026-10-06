@@ -208,8 +208,13 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
         fix = pool.get("gps")                    # present when telemetry was connected
         gp = None
         if fix:
+            # Use the frame position from the clearest sighting, paired with the fix
+            # taken at that same instant. Mixing an averaged position with a single
+            # fix would place the pool where the drone never actually saw it.
+            fx = pool.get("frame_x_at_fix", pool["frame_x"])
+            fy = pool.get("frame_y_at_fix", pool["frame_y"])
             gp = project_to_ground(fix.get("lat"), fix.get("lon"), fix.get("alt_m"),
-                                   fix.get("hdg_deg"), pool["frame_x"], pool["frame_y"],
+                                   fix.get("hdg_deg"), fx, fy,
                                    float(v["hfov_deg"]), aspect)
         source = "telemetry"
         if gp is None and survey_cell:
