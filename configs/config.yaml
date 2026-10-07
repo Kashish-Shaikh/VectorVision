@@ -98,6 +98,12 @@ fusion:
   top_targets: 12
   merge_distance_m: 25
   large_body_m2: 500
+  min_separation_km: 2.0
+  allow_estimated_positions: true
+  priority_bands:
+    critical: 0.40
+    high: 0.20
+    moderate: 0.08
 
 risk_model:
   n_estimators: 500

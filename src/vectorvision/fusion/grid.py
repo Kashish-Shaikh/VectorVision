@@ -129,10 +129,14 @@ def build_risk_map(cfg: dict, model_path: Path, out_dir: Path,
             cols = {k: v[keep] for k, v in cols.items()}
             coords = coords[keep]
 
-        missing = [w for w in want if w not in cols]
-        if missing:
-            raise SystemExit(f"The model needs features this stage cannot build: {missing}")
-        return np.column_stack([cols[w] for w in want]), coords
+        # One checked assembly point: names, order, types, NaN and ranges are all
+        # verified here, so the model can never be handed the wrong matrix.
+        from ..risk.schema import SchemaError, validate
+        try:
+            X = validate(cols, bundle)
+        except SchemaError as e:
+            raise SystemExit(f"Feature check failed for the {label} grid:\n{e}")
+        return X, coords
 
     # ---- Tier 1: coarse pass over the whole district
     coarse_pts = _grid_points(ee, geom, f["coarse_spacing_m"], f["max_coarse_points"])

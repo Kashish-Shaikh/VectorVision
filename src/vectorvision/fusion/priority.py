@@ -83,15 +83,35 @@ def capacity(area_m2: float, reference_m2: float = 50.0) -> float:
     return float(np.clip(area_m2 / max(reference_m2, 1e-6), 0.0, 1.0))
 
 
+DEFAULT_BANDS = {"critical": 0.40, "high": 0.20, "moderate": 0.08}
+
+
+def band_of(pbi: float, bands: dict | None = None) -> str:
+    """Priority category. Thresholds live in config.yaml, not buried in code.
+
+    They are judgement calls about how much evidence justifies a visit, so they
+    should be visible and adjustable by whoever runs the programme.
+    """
+    b = {**DEFAULT_BANDS, **(bands or {})}
+    if pbi > b["critical"]:
+        return "critical"
+    if pbi > b["high"]:
+        return "high"
+    if pbi > b["moderate"]:
+        return "moderate"
+    return "low"
+
+
 def priority_index(suitability: float, confidence: float, frames_seen: int,
-                   area_m2: float, reference_m2: float = 50.0) -> dict:
+                   area_m2: float, reference_m2: float = 50.0,
+                   bands: dict | None = None) -> dict:
     S = float(np.clip(suitability, 0.0, 1.0))
     C = confirmation(confidence, frames_seen)
     A = capacity(area_m2, reference_m2)
     pbi = S * C * A
-    band = ("critical" if pbi > 0.40 else "high" if pbi > 0.20
-            else "moderate" if pbi > 0.08 else "low")
-    return {"priority_index": round(pbi, 4), "band": band,
+    band = band_of(pbi, bands)
+    return {"priority_index": round(pbi, 4), "priority_score": int(round(pbi * 100)),
+            "risk_score": int(round(S * 100)), "band": band,
             "factors": {"habitat_suitability": round(S, 3),
                         "drone_confirmation": round(C, 3),
                         "larval_capacity": round(A, 3)}}
@@ -203,7 +223,7 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
     ref = float(f["reference_pool_m2"])
     aspect = float(f.get("frame_aspect", 1.0))
 
-    targets = []
+    targets, no_gps = [], []
     for pool in video.get("pools", []):
         fix = pool.get("gps")                    # present when telemetry was connected
         gp = None
@@ -217,17 +237,27 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
                                    fix.get("hdg_deg"), fx, fy,
                                    float(v["hfov_deg"]), aspect)
         source = "telemetry"
-        if gp is None and survey_cell:
+        if gp is None and survey_cell and f.get("allow_estimated_positions", True):
             gp = offset_from_cell(survey_cell["lat"], survey_cell["lon"],
                                   pool["frame_x"], pool["frame_y"],
                                   float(v["altitude_m"]), float(v["hfov_deg"]), aspect)
             source = "survey cell + frame offset (approximate)"
         if gp is None:
-            continue                              # no location: cannot be a GPS target
+            # No telemetry and no estimate allowed: the pool is real and is still
+            # reported, but with no coordinates rather than invented ones.
+            no_gps.append({"area_m2": pool["area_m2"], "confidence": pool["confidence"],
+                           "frames_seen": pool["frames_seen"],
+                           "t_start_s": pool.get("t_start_s"), "t_end_s": pool.get("t_end_s"),
+                           "location": "GPS unavailable",
+                           "note": "Detected in the video but not georeferenced. Connect the "
+                                   "telemetry radio, or pass --cell to estimate from the "
+                                   "survey centre."})
+            continue
 
         cell, dist_km = nearest_cell(cells, gp[0], gp[1])
         S = cell["suitability"] if cell and dist_km < f["max_cell_distance_km"] else f["default_suitability"]
-        idx = priority_index(S, pool["confidence"], pool["frames_seen"], pool["area_m2"], ref)
+        idx = priority_index(S, pool["confidence"], pool["frames_seen"], pool["area_m2"], ref,
+                             bands=f.get("priority_bands"))
         reasons = [phrase_reason(r) for r in (cell["reasons"] if cell else [])][:3]
         targets.append({
             "lat": gp[0], "lon": gp[1], "location_source": source,
@@ -245,7 +275,8 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
     big = float(f.get("large_body_m2", 500))
     for t in targets:
         t.update(priority_index(t["factors"]["habitat_suitability"], t["confidence"],
-                                t["frames_seen"], t["area_m2"], ref))
+                                t["frames_seen"], t["area_m2"], ref,
+                                bands=f.get("priority_bands")))
         seen = f"drone saw {t['area_m2']} m2 of standing water across {t['frames_seen']} frames"
         if t.get("merged_detections", 1) > 1:
             seen += f" ({t['merged_detections']} detections merged)"
@@ -279,6 +310,9 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
         notes.append(f"{n_big} target(s) are larger than {int(big)} m2 and are probably "
                      "permanent water, not breeding puddles. Anopheles prefer small sunlit "
                      "pools, so check these before treating them as priority sites.")
+    if no_gps:
+        notes.append(f"{len(no_gps)} water detection(s) have no coordinates and are listed "
+                     "separately. No position was invented for them.")
     if any(t["location_source"].startswith("survey cell") for t in targets):
         notes.append("Positions are approximate: no telemetry, so they were placed by frame "
                      "offset from the survey centre assuming a north-facing camera.")
@@ -287,6 +321,7 @@ def fuse(risk_map: dict, video: dict, cfg: dict, survey_cell=None) -> dict:
         "district": risk_map["meta"]["district"],
         "detections_before_merge": n_raw,
         "targets_found": len(targets),
+        "detections_without_gps": no_gps,
         "bands": bands, "notes": notes,
         "route_km": round(route_length_km(targets, order), 3) if len(order) > 1 else 0.0,
         "reference_pool_m2": ref,

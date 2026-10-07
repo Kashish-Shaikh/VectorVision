@@ -97,6 +97,10 @@ tr:hover td{background:var(--panel-2)}
 .check:last-child{border:none}
 .tagok,.tagstop{font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;color:#fff;flex:none;margin-top:1px}
 .tagok{background:var(--ok)}.tagstop{background:var(--stop)}
+.statusrow{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px}
+.chip{border:1px solid var(--rule-2);background:var(--panel);border-radius:999px;padding:3px 9px;
+  font-size:11px;color:var(--ink-2)}
+.chip.on{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
 .empty{padding:34px 20px;text-align:center;color:var(--ink-2)}
 .empty code{background:var(--panel-2);padding:2px 7px;border-radius:5px;font-size:13px}
 .sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 16px}
@@ -273,11 +277,15 @@ cv.addEventListener("mousemove",e=>{const r=cv.getBoundingClientRect(),mx=e.clie
 
 function topList(){
   if(!S.map)return $("inspector").innerHTML=`<div class="empty"><p>No risk map yet.</p><code>python main.py fuse</code></div>`;
-  const top=S.map.cells.slice().sort((a,b)=>b.suitability-a.suitability).slice(0,8);
-  $("inspector").innerHTML=`<h2>Survey these first</h2><p class="sub">Highest suitability in the scored area.</p>
-    ${top.map((c,i)=>{const n=near(c.lat,c.lon);return `<div class="reason"><b>${i+1}. ${esc(n.town)}</b>
+  const top=S.survey?.cells||S.map.cells.slice().sort((a,b)=>b.suitability-a.suitability).slice(0,8);
+  const sep=S.survey?.min_separation_km;
+  $("inspector").innerHTML=`<h2>Survey these first</h2>
+    <p class="sub">Highest-scoring patches${sep?`, each at least ${sep} km apart so the list shows different places rather than one site repeated`:""}.</p>
+    ${top.map((c,i)=>{const n=near(c.lat,c.lon);return `<div class="reason">
+      <b>${i+1}. ${esc(n.text)}</b>
       <span class="badge b-${c.severity}" style="float:right">${c.severity}</span>
-      <div class="muted">${esc(n.text)} · score ${num(c.suitability)}</div></div>`}).join("")}`;
+      <div class="muted">risk ${c.risk_score ?? Math.round(c.suitability*100)} / 100 ·
+        <a href="${gmaps(c.lat,c.lon)}" target="_blank" rel="noopener">directions</a></div></div>`}).join("")}`;
 }
 function inspect(c){
   const n=near(c.lat,c.lon),mx=Math.max(...c.reasons.map(r=>Math.abs(r.effect)),.001);
@@ -285,7 +293,7 @@ function inspect(c){
     <h2 style="margin-top:10px">${esc(n.text)}</h2>
     <p class="muted num">${c.lat.toFixed(4)}° N, ${c.lon.toFixed(4)}° E · 100 m × 100 m</p>
     <div class="reads">
-      <div class="read"><u>Suitability</u><b class="num">${num(c.suitability)}</b></div>
+      <div class="read"><u>Risk score</u><b class="num">${Math.round(c.suitability*100)} / 100</b></div>
       <div class="read"><u>Water signal</u><b class="num">${c.ndwi>=0?"+":""}${c.ndwi}</b></div>
       <div class="read"><u>Slope</u><b class="num">${c.slope}°</b></div>
       <div class="read"><u>Rain, season</u><b class="num">${c.rain} mm</b></div>
@@ -327,9 +335,39 @@ function renderTargets(){
         .map(v=>`<span class="fbar"><i style="width:${v*100}%"></i></span>`).join("")}</span>
         <div class="muted num">${num(fa.habitat_suitability,2)} · ${num(fa.drone_confirmation,2)} · ${num(fa.larval_capacity,2)}</div></td>
       <td class="muted">${(x.reasons||[]).slice(0,2).map(esc).join("<br>")}</td>
-      <td><a class="btn" href="${gmaps(x.lat,x.lon)}" target="_blank" rel="noopener">Map</a></td></tr>`}).join("")}
+      <td><a class="btn" href="${gmaps(x.lat,x.lon)}" target="_blank" rel="noopener">Map</a>
+        <div class="statusrow" data-site="${x.lat.toFixed(5)},${x.lon.toFixed(5)}">
+          ${["unvisited","inspected","treated","no water found"].map(st=>
+            `<button class="chip" data-st="${st}">${st}</button>`).join("")}
+        </div></td></tr>`}).join("")}
     </tbody></table></div>
-    <div class="pad"><div class="note"><b>${esc(t.index_definition||"")}</b><br>${esc(t.caveat||"")}</div></div>`;
+    ${(t.detections_without_gps||[]).length?`<div class="pad">
+      <h3 style="margin-top:4px">Detected, but not georeferenced</h3>
+      <p class="sub">These pools were seen in the video. No coordinates were invented for them.</p>
+      ${t.detections_without_gps.map(d=>`<div class="reason"><b>${d.area_m2} m²</b>
+        across ${d.frames_seen} frames <span class="badge b-low" style="float:right">GPS unavailable</span>
+        <div class="muted">${esc(d.note||"")}</div></div>`).join("")}</div>`:""}
+    <div class="pad"><div class="note"><b>${esc(t.index_definition||"")}</b><br>${esc(t.caveat||"")}</div>
+      <a class="btn primary" href="/api/report.csv">Download field sheet (CSV)</a></div>`;
+  wireStatus();
+}
+
+async function wireStatus(){
+  const saved=await get("/api/site-status")||{};
+  document.querySelectorAll(".statusrow").forEach(row=>{
+    const id=row.dataset.site, cur=(saved[id]||{}).status||"unvisited";
+    row.querySelectorAll(".chip").forEach(b=>{
+      b.classList.toggle("on",b.dataset.st===cur);
+      b.onclick=async()=>{
+        row.querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));
+        b.classList.add("on");
+        try{
+          await fetch("/api/site-status",{method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({site_id:id,status:b.dataset.st})});
+        }catch(e){ b.textContent=b.dataset.st+" (not saved)"; }
+      };
+    });
+  });
 }
 
 /* ---------- mission ---------- */
@@ -383,6 +421,7 @@ function renderLimits(){
   if(!S.status){$("conn").textContent="server not reachable";return}
   S.metrics=await get("/api/metrics");
   S.map=await get("/api/risk-map");
+  S.survey=await get("/api/survey-first?limit=8&min_km=2");
   S.targets=await get("/api/targets");
   S.mission=await get("/api/mission");
   const d=S.status.district;

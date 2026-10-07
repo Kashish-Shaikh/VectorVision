@@ -562,7 +562,16 @@ def cmd_infer_video(args, cfg):
         print(f"\n  false alarms: {r['fp']} -> {s['fp']}   missed frames: {r['fn']} -> {s['fn']}")
         print("\n  report : outputs/metrics/stage7_filter_eval.json")
     else:
-        res = run_video(cfg, Path(args.video), models, outputs, dev)
+        res = run_video(
+            cfg,
+            Path(args.video),
+            models,
+            outputs,
+            dev,
+            mavlink=args.mavlink,
+            baud=args.baud,
+            telemetry_log=Path(args.telemetry_log) if args.telemetry_log else None,
+        )
         print(f"\nframes analysed     : {res['frames_analysed']}")
         print(f"frames with water   : {res['frames_raw_water']} raw -> "
               f"{res['frames_after_filter']} after the persistence filter")
@@ -762,6 +771,22 @@ def cmd_dashboard(args, cfg):
     serve(outputs, models, args.host, args.port)
 
     return 0
+
+def cmd_test(_args, _cfg):
+    import subprocess
+
+    print("=" * 72)
+    print("TESTS - geometry, temporal filter, priority index, feature schema")
+    print("=" * 72)
+
+    tests = Path(__file__).resolve().parent / "tests" / "test_pipeline.py"
+
+    if not tests.exists():
+        print("tests/test_pipeline.py not found")
+        return 1
+
+    result = subprocess.run([sys.executable, str(tests)])
+    return result.returncode
 
 def main():
     ap = argparse.ArgumentParser(description="Vector Vision")
@@ -1001,6 +1026,7 @@ def main():
     # General
     # ------------------------------------------------------------------
     sub.add_parser("stages", help="list stages")
+    sub.add_parser("test", help="run the test suite")
 
     db = sub.add_parser("dashboard", help="Stage 10")
     db.add_argument("--host", default="127.0.0.1")
@@ -1043,6 +1069,9 @@ def main():
 
     if args.cmd == "dashboard":
         sys.exit(cmd_dashboard(args, cfg))
+
+    if args.cmd == "test":
+        sys.exit(cmd_test(args, cfg))
 
     cmd_stages(args, cfg)
 
